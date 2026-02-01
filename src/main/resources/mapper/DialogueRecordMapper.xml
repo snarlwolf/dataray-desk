@@ -1,0 +1,30 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "mybatis/mybatis-3-mapper.dtd">
+<mapper namespace="com.skydawn.desk.core.mapper.DialogueRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.skydawn.desk.core.entity.DialogueRecord">
+        <id property="id" column="id"/>
+        <result property="staffOrCustomer" column="staff_or_customer"/>
+        <result property="chatterId" column="chatter_id"/>
+        <result property="message" column="message"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="createdTime" column="created_time"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedTime" column="updated_time"/>
+        <result property="updatedBy" column="updated_by"/>
+    </resultMap>
+
+    <select id="findBySessionId" resultMap="BaseResultMap">
+        SELECT * FROM dialogue_record WHERE session_id = #{sessionId} ORDER BY created_time ASC
+    </select>
+
+    <insert id="insert">
+        INSERT INTO dialogue_record
+        (id, staff_or_customer, chatter_id, message, session_id,
+         created_by, updated_by)
+        VALUES
+        (#{id}, #{staffOrCustomer}, #{chatterId}, #{message}, #{sessionId},
+         #{createdBy}, #{updatedBy})
+    </insert>
+
+</mapper>

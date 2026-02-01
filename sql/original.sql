@@ -1,0 +1,22 @@
+CREATE TABLE public.sys_user (
+	user_id int8 NOT NULL,
+	dept_id int8 NULL,
+	user_name varchar(30) NULL,
+	nick_name varchar(30) NULL,
+	user_type varchar(2) NULL,
+	email varchar(50) NULL,
+	phonenumber varchar(11) NULL,
+	sex bpchar(1) NULL,
+	avatar varchar(100) NULL,
+	"password" varchar(100) NULL,
+	status bpchar(1) NULL,
+	del_flag bpchar(1) NULL,
+	login_ip varchar(128) NULL,
+	login_date timestamp(6) NULL,
+	pwd_update_date timestamp(6) NULL,
+	create_by varchar(64) NULL,
+	create_time timestamp(6) NULL,
+	update_by varchar(64) NULL,
+	update_time timestamp(6) NULL,
+	remark varchar(500) NULL
+);

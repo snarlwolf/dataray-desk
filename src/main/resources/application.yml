@@ -1,0 +1,120 @@
+server:
+  port: 8080
+  # 优雅关闭
+  shutdown: graceful
+  servlet:
+    session:
+      cookie:
+        same-site: Lax
+
+spring:
+  application:
+    name: skydawn-desk
+
+  # ==================== 静态资源 ====================
+  web:
+    resources:
+      static-locations: classpath:/static/
+      add-mappings: true
+  mvc:
+    static-path-pattern: /csdesk/**
+
+  # ==================== 数据源 ====================
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: SkydawnDeskHikariPool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      # PostgreSQL 推荐使用 isValid() 而非 SELECT 1
+      # connection-test-query: SELECT 1
+
+  # ==================== Redis ====================
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+
+  # ==================== 优雅关闭 ====================
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+# ==================== 自定义配置 ====================
+sys:
+  # 数据库字段加密密钥（不可更改，否则旧数据无法解密）
+  pwd:
+    cipherB64-decode-token: ${RELAY_TOKEN}
+  # 定时任务
+  timer:
+    main-task-interval: 40000
+  # HTTP 请求头 Token 校验
+  desk-http-head-token: ${DESK_HTTP_HEAD_TOKEN:123456}
+  # 客服台：每用户最大会话数、自动转移阈值（分钟）
+  cs:
+    max-conversations-per-user: 10
+    auto-transfer-offline-minutes: 30
+  # API 签名验证配置
+  api:
+    app-id: ${API_APP_ID:skydawn-desk}
+    secret-key: ${WABA_SENDER_API_SECRET_KEY}
+    timestamp-tolerance: 300000  # 时间戳容差 5分钟(毫秒)
+
+# ==================== WABA 配置 ====================
+waba:
+  authorization: ${WABA_AUTHORIZATION}
+  api-url: ${WABA_API_URL}
+
+# ==================== MyBatis-Plus ====================
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.skydawn.desk.core.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    # 开发时可开启 SQL 日志，生产关闭
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      # 逻辑删除配置（如需要）
+      # logic-delete-field: deleted
+      # logic-delete-value: 1
+      # logic-not-delete-value: 0
+      id-type: assign_id
+
+# ==================== Actuator ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+  health:
+    redis:
+      enabled: true
+    db:
+      enabled: true
+
+# ==================== 日志 ====================
+logging:
+  level:
+    root: INFO
+    com.skydawn: INFO
+    # 开发时可开启 SQL 参数日志
+    # com.skydawn.desk.core.mapper: DEBUG

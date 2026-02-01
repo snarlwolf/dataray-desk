@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Service Login</title>
+    <link rel="icon" href="/csdesk/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/csdesk/styles/lib/bootstrap-icons-1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/csdesk/styles/login.css">
+</head>
+<body>
+    <div id="app">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="login-title-row">
+                    <img src="/csdesk/media/logo-sigle.png" alt="" class="login-logo">
+                    <h1>Customer Service</h1>
+                </div>
+                <p>Sign in to your account</p>
+            </div>
+
+            <form @submit.prevent="handleLogin" class="login-form">
+                <div class="form-group">
+                    <div class="input-with-icon">
+                        <i class="bi bi-people-fill input-icon" aria-hidden="true"></i>
+                        <input type="text" id="username" v-model="username" placeholder="Enter your name" autocomplete="username">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="input-with-icon">
+                        <i class="bi bi-key-fill input-icon" aria-hidden="true"></i>
+                        <input type="password" id="password" v-model="password" placeholder="Enter your password" autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div class="form-group captcha-group">
+                    <div class="captcha-wrapper">
+                        <div class="input-with-icon">
+                            <i class="bi bi-image input-icon" aria-hidden="true"></i>
+                            <input type="text" id="captcha" v-model="captcha" placeholder="Enter Captcha" maxlength="4" autocomplete="off">
+                        </div>
+                        <img :src="captchaImage" @click="refreshCaptcha" alt="Captcha" class="captcha-image" title="Click to refresh">
+                    </div>
+                </div>
+
+                <button type="submit" class="login-btn" ref="loginBtn" :disabled="loading">
+                    <span v-if="loading">Signing in...</span>
+                    <span v-else>Sign In</span>
+                    <i v-if="!loading" class="bi bi-capslock login-btn-icon" aria-hidden="true"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/csdesk/scripts/lib/vue.min.js"></script>
+    <script src="/csdesk/scripts/lib/axios.min.js"></script>
+    <script src="/csdesk/scripts/common/toast.js"></script>
+    <script src="/csdesk/scripts/common/dialog.js"></script>
+    <script src="/csdesk/scripts/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+/**
+ * Console page i18n: en (default), zh, ms.
+ * Cookie: csdesk_lang (en | zh | ms), 1 year.
+ */
+(function(global) {
+    'use strict';
+
+    var COOKIE_NAME = 'csdesk_lang';
+    var COOKIE_MAX_AGE_DAYS = 365;
+
+    var messages = {
+        en: {
+            pageTitle: 'Customer Service Desk',
+            welcome: 'Welcome, ',
+            logout: 'Logout',
+            userInfo: 'User Info',
+            userId: 'ID',
+            username: 'Username',
+            nickname: 'Nickname',
+            conversations: 'Conversations',
+            conversationCount: 'Count',
+            colleagues: 'Colleagues',
+            noConversations: 'No conversations',
+            noColleagues: 'No colleagues online',
+            comingSoon: '(Coming soon)',
+            currentSession: 'Current session ',
+            endSession: 'End session',
+            transfer: 'Transfer',
+            selectConversation: 'Select a conversation to start',
+            noMessages: 'No messages yet. Type below to send.',
+            placeholder: 'Type a message and press Enter or click Send',
+            send: 'Send',
+            sending: 'Sending…',
+            knowledgeBase: 'Knowledge Base / Quick Replies',
+            todo: '(Have not configured knowledge base content)',
+            image: 'Image',
+            fileDownload: 'File (click to download)',
+            delivered: 'Delivered',
+            read: 'Read',
+            close: 'Close',
+            confirmEndTitle: 'End session',
+            confirmEndMessage: 'Are you sure you want to end the session with {nickname}({fromId})?',
+            alertTitle: 'Notice',
+            selectConversationFirst: 'Please select a conversation first',
+            endSessionFailed: 'Failed to end session',
+            enterToUserId: 'Enter the target user ID',
+            transferSuccess: 'Transferred',
+            transferFailed: 'Transfer failed',
+            sendFailed: 'Send failed',
+            messageCannotBeEmpty: 'Message cannot be empty',
+            loggedInElsewhere: 'Logged in elsewhere, please sign in again',
+            quotedMessage: 'Original message',
+            locationLabel: 'Location:',
+            locationMessageHint: 'User {nickname} sent a location message.',
+            openInMap: 'Open in map',
+            confirmOpenExternalTitle: 'Notice',
+            confirmOpenExternal: 'Open external link in a new tab?',
+            mapChoiceTitle: 'Open with',
+            mapChoiceMessage: 'Choose a map to open:',
+            mapChoiceGoogle: 'Open with Google Maps',
+            mapChoiceApple: 'Open with Apple Maps',
+            mapChoiceWaze: 'Open with Waze',
+            mapChoiceBing: 'Open with Bing Maps',
+            contextMenuReaction: 'Like / Reaction',
+            contextMenuReply: 'Reply',
+            replyingToLabel: 'Replying to: '
+        },
+        zh: {
+            pageTitle: '客服工作台',
+            welcome: '欢迎，',
+            logout: '退出',
+            userInfo: '用户信息',
+            userId: 'ID',
+            username: '用户名',
+            nickname: '昵称',
+            conversations: '客户会话',
+            conversationCount: '会话数',
+            colleagues: '在线同事',
+            noConversations: '暂无会话',
+            noColleagues: '暂无在线同事',
+            comingSoon: '（功能暂未开放）',
+            currentSession: '当前会话 ',
+            endSession: '结束会话',
+            transfer: '转移会话',
+            selectConversation: '选择左侧会话开始沟通',
+            noMessages: '暂无消息，在下方输入框发送',
+            placeholder: '输入消息后回车或点击发送',
+            send: '发送',
+            sending: '发送中…',
+            knowledgeBase: '知识库 / 常用回复',
+            todo: '（没有配置知识库内容）',
+            image: '图片',
+            fileDownload: '文件（点击下载）',
+            delivered: '已送达',
+            read: '已读',
+            close: '关闭',
+            confirmEndTitle: '结束会话',
+            confirmEndMessage: '你确定要结束与{nickname}({fromId})之间的会话？',
+            alertTitle: '提示',
+            selectConversationFirst: '请先选择会话',
+            endSessionFailed: '结束会话失败',
+            enterToUserId: '请输入转入用户 ID',
+            transferSuccess: '已转移',
+            transferFailed: '转移失败',
+            sendFailed: '发送失败',
+            messageCannotBeEmpty: '消息不能为空',
+            loggedInElsewhere: '您已在其他地点登录，请重新登录',
+            quotedMessage: '原消息',
+            locationLabel: '位置：',
+            locationMessageHint: '用户{nickname}发送了一条位置消息。',
+            openInMap: '在地图中查看',
+            confirmOpenExternalTitle: '提示',
+            confirmOpenExternal: '是否打开外部链接？',
+            mapChoiceTitle: '打开方式',
+            mapChoiceMessage: '请选择要使用的地图：',
+            mapChoiceGoogle: '使用 Google 地图打开',
+            mapChoiceApple: '使用苹果地图打开',
+            mapChoiceWaze: '使用 Waze 打开',
+            mapChoiceBing: '使用必应地图打开',
+            contextMenuReaction: '点赞表情',
+            contextMenuReply: '回复',
+            replyingToLabel: '正在回复消息：'
+        },
+        ms: {
+            pageTitle: 'Meja Khidmat Pelanggan',
+            welcome: 'Selamat datang, ',
+            logout: 'Log keluar',
+            userInfo: 'Maklumat pengguna',
+            userId: 'ID',
+            username: 'Nama pengguna',
+            nickname: 'Nama panggilan',
+            conversations: 'Perbualan',
+            conversationCount: 'Bilangan',
+            colleagues: 'Rakan sekerja dalam talian',
+            noConversations: 'Tiada perbualan',
+            noColleagues: 'Tiada rakan sekerja dalam talian',
+            comingSoon: '(Akan datang)',
+            currentSession: 'Sesi semasa ',
+            endSession: 'Tamat sesi',
+            transfer: 'Pindah',
+            selectConversation: 'Pilih perbualan di sebelah kiri untuk mula',
+            noMessages: 'Tiada mesej. Taip di bawah untuk hantar.',
+            placeholder: 'Taip mesej dan tekan Enter atau klik Hantar',
+            send: 'Hantar',
+            sending: 'Menghantar…',
+            knowledgeBase: 'Pangkalan pengetahuan / Balasan pantas',
+            todo: '(Tiada konfigurasi pangkalan pengetahuan)',
+            image: 'Imej',
+            fileDownload: 'Fail (klik untuk muat turun)',
+            delivered: 'Dihantar',
+            read: 'Dibaca',
+            close: 'Tutup',
+            confirmEndTitle: 'Tamat sesi',
+            confirmEndMessage: 'Adakah anda pasti mahu menamatkan sesi dengan {nickname}({fromId})?',
+            alertTitle: 'Notis',
+            selectConversationFirst: 'Sila pilih perbualan dahulu',
+            endSessionFailed: 'Gagal menamatkan sesi',
+            enterToUserId: 'Masukkan ID pengguna sasaran',
+            transferSuccess: 'Berjaya dipindah',
+            transferFailed: 'Gagal memindah',
+            sendFailed: 'Gagal menghantar',
+            messageCannotBeEmpty: 'Mesej tidak boleh kosong',
+            loggedInElsewhere: 'Anda telah log masuk di tempat lain, sila log masuk semula',
+            quotedMessage: 'Mesej asal',
+            locationLabel: 'Lokasi:',
+            locationMessageHint: 'Pengguna {nickname} menghantar mesej lokasi.',
+            openInMap: 'Buka dalam peta',
+            confirmOpenExternalTitle: 'Notis',
+            confirmOpenExternal: 'Buka pautan luaran dalam tab baru?',
+            mapChoiceTitle: 'Buka dengan',
+            mapChoiceMessage: 'Pilih peta untuk dibuka:',
+            mapChoiceGoogle: 'Buka dengan Google Maps',
+            mapChoiceApple: 'Buka dengan Apple Maps',
+            mapChoiceWaze: 'Buka dengan Waze',
+            mapChoiceBing: 'Buka dengan Bing Maps',
+            contextMenuReaction: 'Reaksi / Suka',
+            contextMenuReply: 'Balas',
+            replyingToLabel: 'Membalas mesej: '
+        }
+    };
+
+    function getCookie(name) {
+        var parts = ('; ' + document.cookie).split('; ' + name + '=');
+        if (parts.length === 2) return parts[1].split(';')[0];
+        return '';
+    }
+
+    function setCookie(name, value, days) {
+        var maxAge = days * 24 * 60 * 60;
+        document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+    }
+
+    function getLang() {
+        var lang = getCookie(COOKIE_NAME);
+        return messages[lang] ? lang : 'en';
+    }
+
+    function setLang(lang) {
+        if (!messages[lang]) lang = 'en';
+        setCookie(COOKIE_NAME, lang, COOKIE_MAX_AGE_DAYS);
+        return lang;
+    }
+
+    global.I18N_CONSOLE = {
+        messages: messages,
+        getLang: getLang,
+        setLang: setLang
+    };
+})(typeof window !== 'undefined' ? window : this);

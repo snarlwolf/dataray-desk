@@ -1,0 +1,33 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "mybatis/mybatis-3-mapper.dtd">
+<mapper namespace="com.skydawn.desk.core.mapper.CustomerMapper">
+
+    <resultMap id="BaseResultMap" type="com.skydawn.desk.core.entity.Customer">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="nickName" column="nick_name"/>
+        <result property="whatsappNum" column="whatsapp_num"/>
+        <result property="customerTypeId" column="customer_type_id"/>
+        <result property="createdTime" column="created_time"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedTime" column="updated_time"/>
+        <result property="updatedBy" column="updated_by"/>
+    </resultMap>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM customer WHERE id = #{id}
+    </select>
+
+    <select id="findByWhatsapp" resultMap="BaseResultMap">
+        SELECT * FROM customer WHERE whatsapp_num = #{whatsappNum}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO customer
+        (id, name, nick_name, whatsapp_num, customer_type_id, created_by, updated_by)
+        VALUES
+        (#{id}, #{name}, #{nickName}, #{whatsappNum}, #{customerTypeId},
+         #{createdBy}, #{updatedBy})
+    </insert>
+
+</mapper>

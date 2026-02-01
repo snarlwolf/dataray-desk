@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.skydawn.desk.core.mapper.SysUserMapper">
+
+    <!-- 通用字段映射 -->
+    <resultMap id="SysUserMap" type="com.skydawn.desk.core.entity.SysUser">
+        <id property="userId" column="user_id"/>
+
+        <result property="deptId" column="dept_id"/>
+        <result property="userName" column="user_name"/>
+        <result property="nickName" column="nick_name"/>
+        <result property="userType" column="user_type"/>
+        <result property="email" column="email"/>
+        <result property="phonenumber" column="phonenumber"/>
+        <result property="sex" column="sex"/>
+        <result property="avatar" column="avatar"/>
+        <result property="password" column="password"/>
+        <result property="status" column="status"/>
+        <result property="delFlag" column="del_flag"/>
+        <result property="loginIp" column="login_ip"/>
+        <result property="loginDate" column="login_date"/>
+        <result property="pwdUpdateDate" column="pwd_update_date"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <!-- 新增 -->
+    <insert id="insert" parameterType="com.skydawn.desk.core.entity.SysUser">
+        INSERT INTO sys_user (
+            user_id, dept_id, user_name, nick_name, user_type,
+            email, phonenumber, sex, avatar, "password",
+            status, del_flag, login_ip, login_date,
+            pwd_update_date, create_by, create_time,
+            update_by, update_time, remark
+        )
+        VALUES (
+            #{userId}, #{deptId}, #{userName}, #{nickName}, #{userType},
+            #{email}, #{phonenumber}, #{sex}, #{avatar}, #{password},
+            #{status}, #{delFlag}, #{loginIp}, #{loginDate},
+            #{pwdUpdateDate}, #{createBy}, #{createTime},
+            #{updateBy}, #{updateTime}, #{remark}
+        )
+    </insert>
+
+    <!-- 根据 ID 更新 -->
+    <update id="updateById" parameterType="com.skydawn.desk.core.entity.SysUser">
+        UPDATE sys_user
+        SET
+            dept_id = #{deptId},
+            user_name = #{userName},
+            nick_name = #{nickName},
+            user_type = #{userType},
+            email = #{email},
+            phonenumber = #{phonenumber},
+            sex = #{sex},
+            avatar = #{avatar},
+            "password" = #{password},
+            status = #{status},
+            del_flag = #{delFlag},
+            login_ip = #{loginIp},
+            login_date = #{loginDate},
+            pwd_update_date = #{pwdUpdateDate},
+            update_by = #{updateBy},
+            update_time = #{updateTime},
+            remark = #{remark}
+        WHERE user_id = #{userId}
+    </update>
+
+    <!-- 根据 ID 查询 -->
+    <select id="selectById" resultMap="SysUserMap">
+        SELECT * FROM sys_user WHERE user_id = #{userId}
+    </select>
+
+    <!-- 查询全部 -->
+    <select id="selectAll" resultMap="SysUserMap">
+        SELECT * FROM sys_user ORDER BY user_id DESC
+    </select>
+
+    <!-- 根据用户名模糊查询 -->
+    <select id="selectByUserName" resultMap="SysUserMap">
+        SELECT *
+        FROM sys_user
+        WHERE user_name ILIKE CONCAT('%', #{userName}, '%')
+        ORDER BY user_id DESC
+    </select>
+
+    <!-- 根据部门查询 -->
+    <select id="selectByDeptId" resultMap="SysUserMap">
+        SELECT *
+        FROM sys_user
+        WHERE dept_id = #{deptId}
+        ORDER BY user_id DESC
+    </select>
+    
+	<!-- 登录用：根据登录名精确查询 -->
+	<select id="findByLoginName" resultMap="SysUserMap">
+		SELECT *
+		FROM sys_user
+		WHERE user_name = #{loginName}
+		AND del_flag = '0'
+		LIMIT 1
+	</select>
+
+</mapper>
