@@ -29,6 +29,28 @@ public final class CsRedisKeys {
     /** Redis Pub/Sub 频道：同账号在其他实例新建立 WebSocket 时，通知其他实例关闭该客服（登录名）的旧连接 */
     public static final String CHANNEL_WS_CLOSE_ELSEWHERE = PREFIX + "ws:close-elsewhere";
 
+    /** 会话 id 中 phoneNumberId 与 fromId 的分隔符，格式为 phoneNumberId + SEP + fromId，支持同一用户联系不同推广号 */
+    public static final String CONVERSATION_ID_SEPARATOR = "-";
+
+    /**
+     * 组成会话 id：推广号手机 id-用户手机号。同一用户联系不同推广号时会话隔离。
+     * 若 phoneNumberId 为空则退回仅用 fromId（兼容非 WABA 或旧数据）。
+     */
+    public static String formConversationId(String phoneNumberId, String fromId) {
+        if (fromId == null || fromId.isBlank()) return null;
+        if (phoneNumberId == null || phoneNumberId.isBlank()) return fromId;
+        return phoneNumberId + CONVERSATION_ID_SEPARATOR + fromId;
+    }
+
+    /**
+     * 从会话 id 解析出客户 fromId（用户手机号）。格式为 phoneNumberId-fromId 时取分隔符后部分。
+     */
+    public static String parseFromIdFromConversationId(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) return null;
+        int i = conversationId.indexOf(CONVERSATION_ID_SEPARATOR);
+        return i >= 0 ? conversationId.substring(i + 1) : conversationId;
+    }
+
     /** userId 为客服登录名（userName），会转义后拼入 key */
     public static String users(String userId) { return USERS + StringTools.escapeForRedisKeySegment(userId); }
     public static String userOfflineSince(String userId) { return USER_OFFLINE_SINCE + StringTools.escapeForRedisKeySegment(userId); }

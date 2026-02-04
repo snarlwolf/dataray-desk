@@ -153,6 +153,7 @@ public final class WabaParser {
         switch (messageType) {
             case TEXT -> parseTextMessage(message, dto);
             case IMAGE -> parseImageMessage(message, dto);
+            case STICKER -> parseStickerMessage(message, dto);
             case VIDEO -> parseVideoMessage(message, dto);
             case AUDIO -> parseAudioMessage(message, dto);
             case DOCUMENT -> parseDocumentMessage(message, dto);
@@ -206,6 +207,19 @@ public final class WabaParser {
             dto.setMediaMimeType(getAsString(image, "mime_type"));
             dto.setMediaSha256(getAsString(image, "sha256"));
             dto.setMediaCaption(getAsString(image, "caption"));
+        }
+    }
+
+    /**
+     * 解析贴纸消息（sticker）：与图片类似，有 id、url、mime_type、sha256，无 caption
+     */
+    private static void parseStickerMessage(JsonObject message, WabaMessageDto dto) {
+        JsonObject sticker = message.getAsJsonObject("sticker");
+        if (sticker != null) {
+            dto.setMediaId(getAsString(sticker, "id"));
+            dto.setMediaUrl(getAsString(sticker, "url"));
+            dto.setMediaMimeType(getAsString(sticker, "mime_type"));
+            dto.setMediaSha256(getAsString(sticker, "sha256"));
         }
     }
 
@@ -350,6 +364,7 @@ public final class WabaParser {
         return switch (type.toLowerCase()) {
             case "text" -> MessageType.TEXT;
             case "image" -> MessageType.IMAGE;
+            case "sticker" -> MessageType.STICKER;
             case "video" -> MessageType.VIDEO;
             case "audio" -> MessageType.AUDIO;
             case "document" -> MessageType.DOCUMENT;

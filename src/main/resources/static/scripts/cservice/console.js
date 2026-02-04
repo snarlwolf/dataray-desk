@@ -222,6 +222,7 @@ new Vue({
                                             pendingReaction.push(msg);
                                             return;
                                         }
+                                        var rawMediaUrl = msg.mediaUrl || msg.media_url || null;
                                         list.push({
                                             messageId: msg.messageId || null,
                                             textBody: msg.textBody || '',
@@ -229,11 +230,12 @@ new Vue({
                                             fromProfileName: msg.fromProfileName || msg.fromId || '',
                                             isStaff: msg.isStaff === true,
                                             isSystemReply: msg.isSystemReply === true,
+                                            staffLoginId: msg.staffLoginId || msg.staff_login_id || null,
                                             timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
                                             messageType: msg.messageType || 'TEXT',
                                             messageStatus: msg.messageStatus || null,
-                                            mediaUrl: msg.mediaUrl || null,
-                                            mediaCaption: msg.mediaCaption || null,
+                                            mediaUrl: rawMediaUrl,
+                                            mediaCaption: msg.mediaCaption || msg.media_caption || null,
                                             reactions: msg.reactions || [],
                                             quotedMessageId: msg.quotedMessageId || null,
                                             latitude: msg.latitude != null ? msg.latitude : null,
@@ -290,6 +292,91 @@ new Vue({
                 })
                 .catch(function(err) {
                     console.error('Load conversation list error', err);
+                });
+        },
+        /** 拉取某会话全部消息后将会话加入列表（用于从 AISYSTEM/TRANSFERING 重新分配后首次收到消息时展示完整历史） */
+        loadConversationMessagesThenAddConversation: function(key, conversationId, fromId, displayName, messageStatus) {
+            var self = this;
+            axios.get('/desk/conversation/messages', { params: { conversationId: key } })
+                .then(function(msgRes) {
+                    var list = [];
+                    if (msgRes.data.success && msgRes.data.messages) {
+                        var messages = msgRes.data.messages;
+                        var pendingStatus = [];
+                        var pendingReaction = [];
+                        messages.forEach(function(jsonStr) {
+                            try {
+                                var msg = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+                                if (msg.kind === 'message_status') { pendingStatus.push(msg); return; }
+                                if (msg.kind === 'reaction') { pendingReaction.push(msg); return; }
+                                var rawMediaUrl = msg.mediaUrl || msg.media_url || null;
+                                list.push({
+                                    messageId: msg.messageId || null,
+                                    textBody: msg.textBody || '',
+                                    fromId: msg.fromId || '',
+                                    fromProfileName: msg.fromProfileName || msg.fromId || '',
+                                    isStaff: msg.isStaff === true,
+                                    isSystemReply: msg.isSystemReply === true,
+                                    staffLoginId: msg.staffLoginId || msg.staff_login_id || null,
+                                    timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
+                                    messageType: msg.messageType || 'TEXT',
+                                    messageStatus: msg.messageStatus || null,
+                                    mediaUrl: rawMediaUrl,
+                                    mediaCaption: msg.mediaCaption || msg.media_caption || null,
+                                    reactions: msg.reactions || [],
+                                    quotedMessageId: msg.quotedMessageId || null,
+                                    latitude: msg.latitude != null ? msg.latitude : null,
+                                    longitude: msg.longitude != null ? msg.longitude : null
+                                });
+                                if ((msg.messageStatus === 'NORMAL' || msg.messageStatus === 'UNSUPPORTED') && (msg.fromProfileName || msg.fromId)) {
+                                    displayName = msg.fromProfileName || msg.fromId || displayName;
+                                }
+                            } catch (e) { console.error('Parse message error', e); }
+                        });
+                        var rank = { SENT: 0, DELIVERED: 1, READ: 2 };
+                        function sameId(a, b) {
+                            if (a == null && b == null) return true;
+                            if (a == null || b == null) return false;
+                            return String(a).trim() === String(b).trim();
+                        }
+                        pendingStatus.forEach(function(m) {
+                            var newStatus = m.messageStatus || 'SENT';
+                            var newRank = rank[newStatus] != null ? rank[newStatus] : 0;
+                            for (var i = 0; i < list.length; i++) {
+                                if (sameId(list[i].messageId, m.messageId)) {
+                                    var curRank = (list[i].messageStatus != null && rank[list[i].messageStatus] != null) ? rank[list[i].messageStatus] : -1;
+                                    if (newRank >= curRank) self.$set(list[i], 'messageStatus', newStatus);
+                                    break;
+                                }
+                            }
+                        });
+                        pendingReaction.forEach(function(m) {
+                            var emoji = (m.emoji != null && m.emoji !== '') ? m.emoji : '👍';
+                            for (var j = 0; j < list.length; j++) {
+                                if (sameId(list[j].messageId, m.messageId)) {
+                                    list[j].reactions = [emoji];
+                                    break;
+                                }
+                            }
+                        });
+                    }
+                    self.$set(self.messageListByConversation, key, list);
+                    self.conversationList.push({
+                        id: conversationId || fromId,
+                        fromId: fromId,
+                        displayName: (displayName && (messageStatus === 'NORMAL' || messageStatus === 'UNSUPPORTED')) ? displayName : (fromId || conversationId || ''),
+                        unread: 1
+                    });
+                })
+                .catch(function(err) {
+                    console.error('Load messages for new conversation ' + key, err);
+                    self.$set(self.messageListByConversation, key, []);
+                    self.conversationList.push({
+                        id: conversationId || fromId,
+                        fromId: fromId,
+                        displayName: displayName || fromId || conversationId || '',
+                        unread: 1
+                    });
                 });
         },
         connectWebSocket: function() {
@@ -358,47 +445,43 @@ new Vue({
                         var conversationId = msg.conversationId || '';
                         var displayName = msg.fromProfileName || fromId;
                         var key = conversationId || fromId;
-                        var list = self.messageListByConversation[key];
-                        if (!list) {
-                            self.$set(self.messageListByConversation, key, []);
-                            list = self.messageListByConversation[key];
-                        }
-                        list.push({
-                            messageId: msg.messageId || null,
-                            textBody: msg.textBody || '',
-                            fromId: fromId,
-                            fromProfileName: displayName,
-                            isStaff: msg.isStaff === true,
-                            isSystemReply: msg.isSystemReply === true,
-                            timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
-                            messageType: msg.messageType || 'TEXT',
-                            mediaUrl: msg.mediaUrl || null,
-                            mediaCaption: msg.mediaCaption || null,
-                            reactions: [],
-                            quotedMessageId: msg.quotedMessageId || null,
-                            latitude: msg.latitude != null ? msg.latitude : null,
-                            longitude: msg.longitude != null ? msg.longitude : null
-                        });
-                        if (msg.isStaff !== true) {
-                            self.playReceivedSound();
-                        }
                         var item = self.conversationList.find(function(c) {
                             var cKey = c.id || c.fromId;
                             return cKey === key || cKey === conversationId || cKey === fromId;
                         });
                         if (item) {
+                            var list = self.messageListByConversation[key];
+                            if (!list) {
+                                self.$set(self.messageListByConversation, key, []);
+                                list = self.messageListByConversation[key];
+                            }
+                            var rawMediaUrl = msg.mediaUrl || msg.media_url || null;
+                            list.push({
+                                messageId: msg.messageId || null,
+                                textBody: msg.textBody || '',
+                                fromId: fromId,
+                                fromProfileName: displayName,
+                                isStaff: msg.isStaff === true,
+                                isSystemReply: msg.isSystemReply === true,
+                                staffLoginId: msg.staffLoginId || msg.staff_login_id || null,
+                                timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
+                                messageType: msg.messageType || 'TEXT',
+                                messageStatus: msg.messageStatus || null,
+                                mediaUrl: rawMediaUrl,
+                                mediaCaption: msg.mediaCaption || msg.media_caption || null,
+                                reactions: [],
+                                quotedMessageId: msg.quotedMessageId || null,
+                                latitude: msg.latitude != null ? msg.latitude : null,
+                                longitude: msg.longitude != null ? msg.longitude : null
+                            });
                             var isCurrentConversation = (key === self.selectedConversationId || key === self.selectedFromId);
                             self.$set(item, 'unread', isCurrentConversation ? 0 : (item.unread || 0) + 1);
                             if (conversationId) item.id = conversationId;
                             if (fromId) item.fromId = fromId;
-                            // 建立会话后昵称不再变更，仅新建会话时从首条 NORMAL/UNSUPPORTED 消息取昵称
                         } else {
-                            self.conversationList.push({
-                                id: conversationId || fromId,
-                                fromId: fromId,
-                                displayName: (displayName && (msg.messageStatus === 'NORMAL' || msg.messageStatus === 'UNSUPPORTED')) ? displayName : (fromId || conversationId || ''),
-                                unread: 1
-                            });
+                            // 新会话（如从 AISYSTEM/TRANSFERING 重新分配）：先拉取该会话全部历史消息再展示，再将会话加入列表
+                            if (msg.isStaff !== true) self.playReceivedSound();
+                            self.loadConversationMessagesThenAddConversation(key, conversationId, fromId, displayName, msg.messageStatus);
                         }
                     } catch (e) {
                         console.error('WebSocket message parse error', e);
@@ -476,6 +559,7 @@ new Vue({
                             messageId: res.data.messageId || null,
                             textBody: text,
                             isStaff: true,
+                            staffLoginId: self.username,
                             timestamp: Date.now(),
                             messageStatus: null,
                             quotedMessageId: quotedMessageId || null

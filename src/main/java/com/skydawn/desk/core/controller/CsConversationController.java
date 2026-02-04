@@ -3,6 +3,7 @@ package com.skydawn.desk.core.controller;
 import com.skydawn.desk.core.entity.SysUser;
 import com.skydawn.desk.core.service.SysUserService;
 import com.skydawn.desk.service.CsAllocationService;
+import com.skydawn.redis.CsRedisKeys;
 import com.skydawn.redis.RedisFinder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -99,7 +100,7 @@ public class CsConversationController {
     /**
      * 当前用户的会话列表（刷新/重新登录后从 Redis user-conversation 拉取）
      * GET /desk/conversation/list
-     * 返回 conversationIds 及简要信息（id 与 fromId 均为会话 id，即客户 fromId）。
+     * 返回 conversationIds 及简要信息：id 为会话 id（格式 phoneNumberId-fromId），fromId 为解析出的客户手机号。
      */
     @GetMapping("/conversation/list")
     public ResponseEntity<Map<String, Object>> getConversationList(HttpServletRequest request) {
@@ -112,7 +113,10 @@ public class CsConversationController {
         }
         Set<String> ids = redisFinder.getUserConversationList(user.getUserName());
         List<Map<String, String>> conversations = ids.stream()
-                .map(id -> Map.<String, String>of("id", id, "fromId", id))
+                .map(id -> {
+                    String fromId = CsRedisKeys.parseFromIdFromConversationId(id);
+                    return Map.<String, String>of("id", id, "fromId", fromId != null ? fromId : id);
+                })
                 .collect(Collectors.toList());
         result.put("success", true);
         result.put("conversationIds", List.copyOf(ids));

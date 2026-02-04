@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -29,6 +30,8 @@ public class CsAllocationService {
 
     private static final String UNSUPPORTED_AUTO_REPLY_TEXT = "⚠️[系统消息] 暂不支持您所发送的消息格式！";
     private static final String END_SESSION_SYSTEM_MESSAGE = "⚠️[系统消息] 本次会话已经结束。";
+    /** 未分配人工时的会话归属标识，新消息到达时若为此类则重新分配人工（规则同新会话） */
+    private static final Set<String> NON_HUMAN_USER_IDS = Set.of("AISYSTEM", "TRANSFERING");
 
     private final RedisFinder redisFinder;
     private final RedisOperation redisOperation;
@@ -43,7 +46,7 @@ public class CsAllocationService {
     }
 
     /**
-     * 收到消息后：对 fromId 加锁，查会话 → 推送 / 重新分配 / 分配。
+     * 收到消息后：按会话 id（phoneNumberId-fromId）加锁，查会话 → 推送 / 重新分配 / 分配。
      */
     public void receiveMessage(GeneralMessageDto dto) {
         String fromId = dto.getFromId();
@@ -61,17 +64,18 @@ public class CsAllocationService {
             receiveReaction(dto);
             return;
         }
-        String lockKey = CsRedisKeys.lockFrom(fromId);
+        String conversationId = CsRedisKeys.formConversationId(dto.getPhoneNumberId(), fromId);
+        String lockKey = CsRedisKeys.lockConversation(conversationId);
         String lockVal = "msg-" + System.currentTimeMillis();
         if (!redisOperation.tryLock(lockKey, lockVal)) {
             try { Thread.sleep(50); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             if (!redisOperation.tryLock(lockKey, lockVal)) {
-                log.debug("receiveMessage: lock failed for fromId={}, skip", fromId);
+                log.debug("receiveMessage: lock failed for conversationId={}, skip", conversationId);
                 return;
             }
         }
         try {
-            receiveMessageUnderLock(fromId, dto);
+            receiveMessageUnderLock(conversationId, dto);
         } finally {
             redisOperation.unlock(lockKey);
         }
@@ -84,7 +88,7 @@ public class CsAllocationService {
      */
     private void receiveStatusUpdate(GeneralMessageDto dto) {
         String fromId = dto.getFromId();
-        String existingConvId = redisFinder.getFromConversation(fromId);
+        String existingConvId = redisFinder.getFromConversation(dto.getPhoneNumberId(), fromId);
         if (existingConvId == null) {
             log.debug("status update ignored, no conversation for fromId={}", fromId);
             return;
@@ -121,7 +125,7 @@ public class CsAllocationService {
             log.debug("reaction ignored, reactionMessageId empty");
             return;
         }
-        String existingConvId = redisFinder.getFromConversation(fromId);
+        String existingConvId = redisFinder.getFromConversation(dto.getPhoneNumberId(), fromId);
         if (existingConvId == null) {
             log.debug("reaction ignored, no conversation for fromId={}", fromId);
             return;
@@ -142,23 +146,29 @@ public class CsAllocationService {
         redisOperation.appendConversationMessage(existingConvId, json);
     }
 
-    private void receiveMessageUnderLock(String fromId, GeneralMessageDto dto) {
-        String existingConvId = redisFinder.getFromConversation(fromId);
+    private void receiveMessageUnderLock(String conversationId, GeneralMessageDto dto) {
+        String fromId = dto.getFromId();
+        String existingConvId = redisFinder.getFromConversation(dto.getPhoneNumberId(), fromId);
         if (existingConvId == null) {
             if (!isContentMessageForNewSession(dto)) {
-                log.debug("receiveMessage: ignore status-only message for new fromId={}, no session created", fromId);
+                log.debug("receiveMessage: ignore status-only message for new conversationId={}, no session created", conversationId);
                 return;
             }
-            allocateNewConversation(fromId, fromId, dto);
+            allocateNewConversation(fromId, conversationId, dto);
             return;
         }
         String userId = redisFinder.getConversationUser(existingConvId);
         if (userId == null || redisFinder.getConversationFromId(existingConvId) == null) {
             if (!isContentMessageForNewSession(dto)) {
-                log.debug("receiveMessage: ignore status-only message for orphan fromId={}, no session", fromId);
+                log.debug("receiveMessage: ignore status-only message for orphan conversationId={}, no session", conversationId);
                 return;
             }
-            allocateNewConversation(fromId, fromId, dto);
+            allocateNewConversation(fromId, conversationId, dto);
+            return;
+        }
+        // 会话归属为 AISYSTEM/TRANSFERING 时视为未分配人工，重新分配给在线客服（规则同新会话）；客服打开会话时会从 Redis 拉取全部历史消息
+        if (NON_HUMAN_USER_IDS.contains(userId)) {
+            reallocateFromNonHumanUser(fromId, existingConvId, userId, dto);
             return;
         }
         if (redisFinder.isUserOnline(userId)) {
@@ -166,6 +176,21 @@ public class CsAllocationService {
             return;
         }
         reassignAndPush(fromId, existingConvId, userId, dto);
+    }
+
+    /** 会话归属为 AISYSTEM/TRANSFERING 时重新分配给在线人工客服，分配规则同新会话。 */
+    private void reallocateFromNonHumanUser(String fromId, String conversationId, String nonHumanUserId, GeneralMessageDto dto) {
+        redisOperation.userConversationRemove(nonHumanUserId, conversationId);
+        List<OnlineUserSlot> slots = redisFinder.getOnlineUsersWithConversationCountAndLoginTime();
+        String newUserId = pickBestUser(slots);
+        if (newUserId == null) {
+            redisOperation.userConversationAdd(nonHumanUserId, conversationId);
+            log.debug("reallocateFromNonHumanUser: no online user for conversationId={}, leave with {}", conversationId, nonHumanUserId);
+            return;
+        }
+        redisOperation.userConversationAdd(newUserId, conversationId);
+        redisOperation.setConversationUser(conversationId, newUserId);
+        pushToUser(newUserId, conversationId, dto);
     }
 
     /** 仅 NORMAL、UNSUPPORTED 可建立会话；SENT/DELIVERED/READ 为首条时说明会话异常，忽略直到收到内容消息。 */
@@ -282,6 +307,7 @@ public class CsAllocationService {
         replyDto.setMessageStatus(GeneralMessageDto.MessageStatus.SENT);
         replyDto.setIsStaff(true);
         replyDto.setIsSystemReply(true);
+        replyDto.setStaffLoginId(userId);
         replyDto.setQuotedMessageId(incomingDto.getMessageId());
         replyDto.setMessageSource("waba");
         replyDto.setPhoneNumberId(phoneNumberId);

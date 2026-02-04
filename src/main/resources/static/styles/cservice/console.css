@@ -455,9 +455,17 @@ body {
     background: #0284c7;
     color: #fff;
 }
+/* 我方回复但无 loginId 或 loginId 非当前客服：灰色背景 */
+.chat-message-row.is-staff.is-other-staff .chat-message-bubble {
+    background: #888888;
+    color: #fff;
+}
 /* 自动回复气泡：原 #0369a1 色相左移 15%（约 54°）→ hsl(146, 96%, 32%) */
 .chat-message-row.is-staff.is-system-reply .chat-message-bubble {
     background: hsl(146, 96%, 32%);
+}
+.chat-message-row.is-staff.is-system-reply.is-other-staff .chat-message-bubble {
+    background: #888888;
 }
 .chat-message-bubble-unsupported {
     background: #fef9c3 !important;
@@ -466,6 +474,19 @@ body {
 .chat-message-row.is-staff .chat-message-bubble-unsupported {
     background: #fef9c3 !important;
     color: #854d0e;
+}
+.chat-message-row.is-staff.is-other-staff .chat-message-bubble-unsupported {
+    background: #888888 !important;
+    color: #fff;
+}
+/* 非本人发送的我方消息：前缀 [loginId回复] 或 [AI回复]，与回复内容同标签内，用 i 改色 */
+.chat-message-other-staff-prefix {
+    font-style: normal;
+    font-size: 0.9em;
+    color: #DDDDDD;
+}
+.chat-message-row.is-staff.is-other-staff .chat-message-other-staff-prefix {
+    color: #DDDDDD;
 }
 .chat-message-sender {
     display: block;
@@ -759,6 +780,14 @@ body {
 }
 .chat-msg-ticks .tick-second {
     margin-left: -0.5em;
+}
+/* 非本人发送的我方消息：下方时间和勾勾为 #DDDDDD */
+.chat-message-row.is-staff.is-other-staff .chat-message-meta,
+.chat-message-row.is-staff.is-other-staff .chat-message-time,
+.chat-message-row.is-staff.is-other-staff .chat-msg-ticks-slot,
+.chat-message-row.is-staff.is-other-staff .chat-msg-ticks,
+.chat-message-row.is-staff.is-other-staff .chat-msg-ticks .tick {
+    color: #DDDDDD;
 }
 .chat-empty-tip {
     color: #94a3b8;

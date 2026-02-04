@@ -10,6 +10,8 @@ public class GeneralMessageDto {
         TEXT,
         /** 图片消息 */
         IMAGE,
+        /** 贴纸消息（sticker） */
+        STICKER,
         /** 视频消息 */
         VIDEO,
         /** 音频消息 */
@@ -111,6 +113,8 @@ public class GeneralMessageDto {
     private Boolean isStaff;
     /** 是否为系统自动回复（如“暂不支持您所发送的消息格式！”）；用于更深蓝气泡样式 */
     private Boolean isSystemReply;
+    /** 客服发送时的登录名（loginId），写入 Redis 会话消息时记录，便于审计与展示 */
+    private String staffLoginId;
 
     // ==================== Getters and Setters ====================
     
@@ -306,6 +310,14 @@ public class GeneralMessageDto {
 
     public void setIsSystemReply(Boolean isSystemReply) {
         this.isSystemReply = isSystemReply;
+    }
+
+    public String getStaffLoginId() {
+        return staffLoginId;
+    }
+
+    public void setStaffLoginId(String staffLoginId) {
+        this.staffLoginId = staffLoginId;
     }
 
     public void setMessageSource(String messageSource) {

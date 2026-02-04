@@ -1,6 +1,7 @@
 package com.skydawn.desk.core.controller;
 
 import com.google.gson.Gson;
+import com.skydawn.desk.core.entity.SysUser;
 import com.skydawn.desk.dto.GeneralMessageDto;
 import com.skydawn.desk.message.waba.WabaMessageSender;
 import com.skydawn.desk.message.waba.WabaSenderDto;
@@ -90,6 +91,10 @@ public class TextMessageSenderController {
                 if (dto != null && dto.getQuotedMessageId() != null && !dto.getQuotedMessageId().isBlank()) {
                     staffMsg.setQuotedMessageId(dto.getQuotedMessageId());
                 }
+                Object sessionUser = request.getSession().getAttribute(SysUserLoginController.SESSION_USER_KEY);
+                if (sessionUser instanceof SysUser u) {
+                    staffMsg.setStaffLoginId(u.getUserName());
+                }
                 redisOperation.appendConversationMessage(conversationId, GSON.toJson(staffMsg));
             } else {
                 log.warn("WABA send failed conversationId={}", conversationId);
@@ -140,7 +145,21 @@ public class TextMessageSenderController {
         }
         boolean ok = wabaMessageSender.sendReaction(phoneNumberId, fromId, messageId, emoji);
         result.put("success", ok);
-        if (!ok) result.put("message", "WABA send reaction failed");
+        if (!ok) {
+            result.put("message", "WABA send reaction failed");
+            return ResponseEntity.ok(result);
+        }
+        // 我方点赞也写入一条 kind=reaction，与对方点赞格式一致，重载/重登时能显示 emoji（否则只有 message_status 无 emoji）
+        Map<String, Object> reactionPayload = new HashMap<>();
+        reactionPayload.put("kind", "reaction");
+        reactionPayload.put("conversationId", conversationId);
+        reactionPayload.put("messageId", messageId);
+        reactionPayload.put("emoji", emoji != null && !emoji.isEmpty() ? emoji : "👍");
+        Object sessionUser = request.getSession().getAttribute(SysUserLoginController.SESSION_USER_KEY);
+        if (sessionUser instanceof SysUser u) {
+            reactionPayload.put("staffLoginId", u.getUserName());
+        }
+        redisOperation.appendConversationMessage(conversationId, GSON.toJson(reactionPayload));
         return ResponseEntity.ok(result);
     }
 }

@@ -47,6 +47,7 @@ public final class WabaToGeneralMessageConverter {
         return switch (t) {
             case TEXT -> GeneralMessageDto.MessageType.TEXT;
             case IMAGE -> GeneralMessageDto.MessageType.IMAGE;
+            case STICKER -> GeneralMessageDto.MessageType.STICKER;
             case VIDEO -> GeneralMessageDto.MessageType.VIDEO;
             case AUDIO -> GeneralMessageDto.MessageType.AUDIO;
             case DOCUMENT -> GeneralMessageDto.MessageType.DOCUMENT;

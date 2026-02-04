@@ -30,11 +30,15 @@ public class RedisFinder {
         return redis.opsForValue().get(Objects.requireNonNull(key));
     }
 
-    /** 若 fromId 有进行中会话则返回会话 id（即 fromId），否则 null。用 conversationtype 键存在表示“有会话”。 */
-    public String getFromConversation(String fromId) {
+    /**
+     * 若该（推广号, 用户）有进行中会话则返回会话 id（格式 phoneNumberId-fromId 或仅 fromId），否则 null。
+     * phoneNumberId 为空时按仅 fromId 的旧格式查找。
+     */
+    public String getFromConversation(String phoneNumberId, String fromId) {
         if (fromId == null || fromId.isBlank()) return null;
-        String key = CsRedisKeys.conversationType(Objects.requireNonNull(fromId));
-        return Boolean.TRUE.equals(redis.hasKey(Objects.requireNonNull(key))) ? fromId : null;
+        String conversationId = CsRedisKeys.formConversationId(phoneNumberId, fromId);
+        String keyType = CsRedisKeys.conversationType(Objects.requireNonNull(conversationId));
+        return Boolean.TRUE.equals(redis.hasKey(Objects.requireNonNull(keyType))) ? conversationId : null;
     }
 
     public String getConversationUser(String conversationId) {
@@ -43,10 +47,10 @@ public class RedisFinder {
         return redis.opsForValue().get(Objects.requireNonNull(key));
     }
 
-    /** 会话 id 即 fromId，直接返回 conversationId，不查 Redis。 */
+    /** 从会话 id 解析出客户 fromId（用户手机号）。格式为 phoneNumberId-fromId 时取分隔符后部分，否则原样返回。 */
     public String getConversationFromId(String conversationId) {
         if (conversationId == null || conversationId.isBlank()) return null;
-        return conversationId;
+        return CsRedisKeys.parseFromIdFromConversationId(conversationId);
     }
 
     /** 会话渠道类型，如 "waba" */

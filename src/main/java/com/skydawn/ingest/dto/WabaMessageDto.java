@@ -14,6 +14,8 @@ public class WabaMessageDto {
         TEXT,
         /** 图片消息 */
         IMAGE,
+        /** 贴纸消息（sticker，WebP 等） */
+        STICKER,
         /** 视频消息 */
         VIDEO,
         /** 音频消息 */
