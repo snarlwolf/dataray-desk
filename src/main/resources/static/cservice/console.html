@@ -99,34 +99,37 @@
                 </div>
                 <template v-else-if="selectedConversationId || selectedFromId">
                     <div class="chat-message-list" ref="messageList">
-                        <div v-for="(msg, idx) in currentMessages" :key="idx" class="chat-message-row" :class="{ 'is-staff': msg.isStaff, 'is-system-reply': msg.isSystemReply, 'is-other-staff': msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username) }" :data-message-id="msg.messageId || ''" @contextmenu.prevent="onMessageContextMenu($event, msg)">
+                        <div v-for="(msg, idx) in currentMessages" :key="idx" class="chat-message-row" :class="{ 'is-staff': msg.isStaff, 'is-system-reply': msg.isSystemReply, 'is-other-staff': msg.isStaff && (!msg.senderName || msg.senderName !== username) }" :data-message-id="msg.messageId || ''" @contextmenu.prevent="onMessageContextMenu($event, msg)">
                             <div class="chat-bubble-wrap">
-                                <div class="chat-message-bubble" :class="{ 'chat-message-bubble-unsupported': msg.messageType === 'UNSUPPORTED' }">
+                                <div class="chat-message-bubble" :class="{ 'chat-message-bubble-unsupported': msg.messageStatus === 'UNSUPPORTED' }">
                                     <div v-if="msg.quotedMessageId" class="chat-message-quoted" @click="scrollToMessage(msg.quotedMessageId)" :title="getQuotedPreview(msg.quotedMessageId)">
                                         <span class="chat-message-quoted-label">{{ t('quotedMessage') }}</span>
                                         <span class="chat-message-quoted-preview">{{ getQuotedPreview(msg.quotedMessageId) }}</span>
                                     </div>
-                                    <template v-if="msg.mediaUrl">
+                                    <template v-if="msg.messageStatus === 'UNSUPPORTED'">
+                                        <p class="chat-message-text">{{ msg.textBody }}</p>
+                                    </template>
+                                    <template v-else-if="msg.mediaUrl">
                                         <template v-if="msg.messageType === 'VIDEO'">
                                             <video :src="mediaProxyUrl(msg.mediaUrl)" class="chat-message-video" controls preload="metadata" @error="onMediaError"></video>
-                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username)" class="chat-message-other-staff-prefix">{{ (msg.staffLoginId && msg.staffLoginId.trim()) ? '[' + msg.staffLoginId + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
+                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.senderName || msg.senderName !== username)" class="chat-message-other-staff-prefix">{{ (msg.senderName && msg.senderName.trim()) ? '[' + msg.senderName + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
                                         </template>
                                         <template v-else-if="msg.messageType === 'AUDIO'">
                                             <audio :src="mediaProxyUrl(msg.mediaUrl)" class="chat-message-audio" controls preload="metadata" @error="onMediaError"></audio>
-                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username)" class="chat-message-other-staff-prefix">{{ (msg.staffLoginId && msg.staffLoginId.trim()) ? '[' + msg.staffLoginId + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
+                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.senderName || msg.senderName !== username)" class="chat-message-other-staff-prefix">{{ (msg.senderName && msg.senderName.trim()) ? '[' + msg.senderName + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
                                         </template>
                                         <template v-else-if="msg.messageType === 'IMAGE' || msg.messageType === 'STICKER'">
                                             <div class="chat-message-media-link chat-message-image-wrap" @click="openImagePreview(msg.mediaUrl)">
                                                 <img :src="mediaProxyUrl(msg.mediaUrl)" :alt="msg.messageType === 'STICKER' ? '贴纸' : '图片'" class="chat-message-image" loading="lazy" @error="onImageError">
                                             </div>
-                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username)" class="chat-message-other-staff-prefix">{{ (msg.staffLoginId && msg.staffLoginId.trim()) ? '[' + msg.staffLoginId + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
+                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.senderName || msg.senderName !== username)" class="chat-message-other-staff-prefix">{{ (msg.senderName && msg.senderName.trim()) ? '[' + msg.senderName + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
                                         </template>
                                         <template v-else>
                                             <a :href="mediaProxyUrl(msg.mediaUrl)" download class="chat-message-file" target="_blank" rel="noopener">
                                                 <span class="chat-message-file-icon">📄</span>
                                                 <span class="chat-message-file-label">{{ t('fileDownload') }}</span>
                                             </a>
-                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username)" class="chat-message-other-staff-prefix">{{ (msg.staffLoginId && msg.staffLoginId.trim()) ? '[' + msg.staffLoginId + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
+                                            <p v-if="msg.mediaCaption || msg.textBody" class="chat-message-text"><i v-if="msg.isStaff && (!msg.senderName || msg.senderName !== username)" class="chat-message-other-staff-prefix">{{ (msg.senderName && msg.senderName.trim()) ? '[' + msg.senderName + '回复] ' : '[AI回复] ' }}</i>{{ msg.mediaCaption || msg.textBody }}</p>
                                         </template>
                                     </template>
                                     <template v-else-if="msg.messageType === 'LOCATION' && (msg.latitude != null || msg.longitude != null)">
@@ -134,7 +137,7 @@
                                             <img src="/csdesk/media/map_ico_s.png" alt="" class="chat-message-location-icon" aria-hidden="true">
                                             <div class="chat-message-location-content">
                                                 <p class="chat-message-location-hint">{{ t('locationMessageHint').replace('{nickname}', msg.fromProfileName || msg.fromId || '') }}</p>
-                                                <p class="chat-message-text"><i v-if="msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username)" class="chat-message-other-staff-prefix">{{ (msg.staffLoginId && msg.staffLoginId.trim()) ? '[' + msg.staffLoginId + '回复] ' : '[AI回复] ' }}</i>{{ formatLocation(msg.latitude, msg.longitude) }}</p>
+                                                <p class="chat-message-text"><i v-if="msg.isStaff && (!msg.senderName || msg.senderName !== username)" class="chat-message-other-staff-prefix">{{ (msg.senderName && msg.senderName.trim()) ? '[' + msg.senderName + '回复] ' : '[AI回复] ' }}</i>{{ formatLocation(msg.latitude, msg.longitude) }}</p>
                                                 <button type="button" class="chat-message-location-link" @click="openLocationInMap(msg.latitude, msg.longitude)">{{ t('openInMap') }}</button>
                                             </div>
                                         </div>
@@ -143,12 +146,12 @@
                                         <div class="chat-message-contacts-wrap">
                                             <img src="/csdesk/media/person_info_ico_s.png" alt="" class="chat-message-contacts-icon" aria-hidden="true">
                                             <div class="chat-message-contacts-content">
-                                                <p class="chat-message-text"><i v-if="msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username)" class="chat-message-other-staff-prefix">{{ (msg.staffLoginId && msg.staffLoginId.trim()) ? '[' + msg.staffLoginId + '回复] ' : '[AI回复] ' }}</i>{{ msg.textBody }}</p>
+                                                <p class="chat-message-text"><i v-if="msg.isStaff && (!msg.senderName || msg.senderName !== username)" class="chat-message-other-staff-prefix">{{ (msg.senderName && msg.senderName.trim()) ? '[' + msg.senderName + '回复] ' : '[AI回复] ' }}</i>{{ msg.textBody }}</p>
                                             </div>
                                         </div>
                                     </template>
                                     <template v-else>
-                                        <p class="chat-message-text"><i v-if="msg.isStaff && (!msg.staffLoginId || msg.staffLoginId !== username)" class="chat-message-other-staff-prefix">{{ (msg.staffLoginId && msg.staffLoginId.trim()) ? '[' + msg.staffLoginId + '回复] ' : '[AI回复] ' }}</i>{{ msg.textBody }}</p>
+                                        <p class="chat-message-text"><i v-if="msg.isStaff && (!msg.senderName || msg.senderName !== username)" class="chat-message-other-staff-prefix">{{ (msg.senderName && msg.senderName.trim()) ? '[' + msg.senderName + '回复] ' : '[AI回复] ' }}</i>{{ msg.textBody }}</p>
                                     </template>
                                     <span class="chat-message-meta">
                                         <span class="chat-message-time">{{ formatMessageTime(msg.timestamp) }}</span>

@@ -113,8 +113,10 @@ public class GeneralMessageDto {
     private Boolean isStaff;
     /** 是否为系统自动回复（如“暂不支持您所发送的消息格式！”）；用于更深蓝气泡样式 */
     private Boolean isSystemReply;
-    /** 客服发送时的登录名（loginId），写入 Redis 会话消息时记录，便于审计与展示 */
-    private String staffLoginId;
+    /** 客服发送时的发送者名称（senderName），写入 Redis 会话消息时记录，便于审计与展示 */
+    private String senderName;
+    /** 系统自动回复时使用的文案（仅当 messageStatus=UNSUPPORTED 且需与默认「暂不支持」不同的保底文案时设置，如配置缺失时的「非常抱歉，由于未知原因…」） */
+    private String unsupportedAutoReplyText;
 
     // ==================== Getters and Setters ====================
     
@@ -312,12 +314,20 @@ public class GeneralMessageDto {
         this.isSystemReply = isSystemReply;
     }
 
-    public String getStaffLoginId() {
-        return staffLoginId;
+    public String getSenderName() {
+        return senderName;
     }
 
-    public void setStaffLoginId(String staffLoginId) {
-        this.staffLoginId = staffLoginId;
+    public void setSenderName(String senderName) {
+        this.senderName = senderName;
+    }
+
+    public String getUnsupportedAutoReplyText() {
+        return unsupportedAutoReplyText;
+    }
+
+    public void setUnsupportedAutoReplyText(String unsupportedAutoReplyText) {
+        this.unsupportedAutoReplyText = unsupportedAutoReplyText;
     }
 
     public void setMessageSource(String messageSource) {

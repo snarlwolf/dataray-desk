@@ -1,6 +1,8 @@
 package com.skydawn.desk.service;
 
 import com.google.gson.Gson;
+import com.skydawn.common.Defs;
+import com.skydawn.common.Vars;
 import com.skydawn.desk.dto.GeneralMessageDto;
 import com.skydawn.desk.message.waba.WabaMessageSender;
 import com.skydawn.desk.message.waba.WabaSenderDto;
@@ -29,6 +31,11 @@ public class CsAllocationService {
     private static final Gson GSON = new Gson();
 
     private static final String UNSUPPORTED_AUTO_REPLY_TEXT = "⚠️[系统消息] 暂不支持您所发送的消息格式！";
+    private static final String UNSUPPORTED_DISPLAY_TEMPLATE = "对方发送了一条%s消息，目前不支持查看。";
+    /** 保底：Vars 中无该消息类型配置时，工作台展示文案 */
+    private static final String UNSUPPORTED_UNKNOWN_DISPLAY = "对方发送了一条不在我们系统内的消息类型，无法解析";
+    /** 保底：Vars 中无该消息类型配置时，回复对方文案 */
+    private static final String UNSUPPORTED_UNKNOWN_AUTO_REPLY = "⚠️[系统消息] 非常抱歉，由于未知原因，系统未能解析您所发送的这条消息！";
     private static final String END_SESSION_SYSTEM_MESSAGE = "⚠️[系统消息] 本次会话已经结束。";
     /** 未分配人工时的会话归属标识，新消息到达时若为此类则重新分配人工（规则同新会话） */
     private static final Set<String> NON_HUMAN_USER_IDS = Set.of("AISYSTEM", "TRANSFERING");
@@ -63,6 +70,10 @@ public class CsAllocationService {
         if (dto.getMessageType() == GeneralMessageDto.MessageType.REACTION) {
             receiveReaction(dto);
             return;
+        }
+        // WhatsApp 消息：按 Vars.SYS_GLOBAL_PROPERTY 中 message.enable.{messageType} 判断是否支持；0=按“不支持”展示并自动回复
+        if ("waba".equalsIgnoreCase(dto.getMessageSource())) {
+            normalizeUnsupportedDisplay(dto);
         }
         String conversationId = CsRedisKeys.formConversationId(dto.getPhoneNumberId(), fromId);
         String lockKey = CsRedisKeys.lockConversation(conversationId);
@@ -193,6 +204,35 @@ public class CsAllocationService {
         pushToUser(newUserId, conversationId, dto);
     }
 
+    /**
+     * 统一“不支持”展示与保底：根据 Vars.SYS_GLOBAL_PROPERTY 中 message.enable.{messageType} 决定：
+     * "1"=正常接收；"0"=展示「对方发送了一条XXX消息，目前不支持查看。」并回复「暂不支持…」；
+     * 无配置=保底展示「对方发送了一条不在我们系统内的消息类型，无法解析」并回复「非常抱歉，由于未知原因…」。
+     */
+    private void normalizeUnsupportedDisplay(GeneralMessageDto dto) {
+        GeneralMessageDto.MessageType type = dto.getMessageType();
+        if (type == null) return;
+        String enableValue = getMessageEnableConfigValue(dto);
+        if ("1".equals(enableValue)) return;  // 明确开启，正常接收
+        dto.setMessageStatus(GeneralMessageDto.MessageStatus.UNSUPPORTED);
+        if (enableValue == null) {
+            // 保底：无配置
+            dto.setTextBody(UNSUPPORTED_UNKNOWN_DISPLAY);
+            dto.setUnsupportedAutoReplyText(UNSUPPORTED_UNKNOWN_AUTO_REPLY);
+        } else {
+            // "0"：已知类型但不支持
+            dto.setTextBody(String.format(UNSUPPORTED_DISPLAY_TEMPLATE, type.name()));
+        }
+    }
+
+    /** 从 Vars.SYS_GLOBAL_PROPERTY 取 key=Defs.PROP_KEY_MESSAGE_ENABLE_PRE + messageType；返回 "1"/"0"/null（无配置）。 */
+    private static String getMessageEnableConfigValue(GeneralMessageDto dto) {
+        Map<String, String> props = Vars.getSysGlobalProperty();
+        if (props == null || props.isEmpty()) return null;
+        String key = Defs.PROP_KEY_MESSAGE_ENABLE_PRE + dto.getMessageType().name();
+        return props.get(key);
+    }
+
     /** 仅 NORMAL、UNSUPPORTED 可建立会话；SENT/DELIVERED/READ 为首条时说明会话异常，忽略直到收到内容消息。 */
     private static boolean isContentMessageForNewSession(GeneralMessageDto dto) {
         GeneralMessageDto.MessageStatus s = dto.getMessageStatus();
@@ -265,7 +305,7 @@ public class CsAllocationService {
             log.warn("pushToUser failed, userId={}", userId);
         }
         redisOperation.appendConversationMessage(conversationId, json);
-        if (dto.getMessageType() == GeneralMessageDto.MessageType.UNSUPPORTED && "waba".equalsIgnoreCase(redisFinder.getConversationType(conversationId))) {
+        if (dto.getMessageStatus() == GeneralMessageDto.MessageStatus.UNSUPPORTED && "waba".equalsIgnoreCase(redisFinder.getConversationType(conversationId))) {
             sendUnsupportedAutoReplyAndPush(userId, conversationId, dto);
         }
     }
@@ -287,7 +327,9 @@ public class CsAllocationService {
             log.warn("sendUnsupportedAutoReply: phoneNumberId empty conversationId={}", conversationId);
             return;
         }
-        WabaSenderDto wabaDto = new WabaSenderDto(fromId, UNSUPPORTED_AUTO_REPLY_TEXT, phoneNumberId);
+        String replyText = (incomingDto.getUnsupportedAutoReplyText() != null && !incomingDto.getUnsupportedAutoReplyText().isBlank())
+                ? incomingDto.getUnsupportedAutoReplyText() : UNSUPPORTED_AUTO_REPLY_TEXT;
+        WabaSenderDto wabaDto = new WabaSenderDto(fromId, replyText, phoneNumberId);
         String incomingMessageId = incomingDto.getMessageId();
         if (incomingMessageId != null && !incomingMessageId.isBlank()) {
             wabaDto.setContextMessageId(incomingMessageId);
@@ -300,14 +342,14 @@ public class CsAllocationService {
         GeneralMessageDto replyDto = new GeneralMessageDto();
         replyDto.setConversationId(conversationId);
         replyDto.setFromId(fromId);
-        replyDto.setTextBody(UNSUPPORTED_AUTO_REPLY_TEXT);
+        replyDto.setTextBody(replyText);
         replyDto.setMessageId(sent.getMessageId());
         replyDto.setTimestamp(System.currentTimeMillis() / 1000);
         replyDto.setMessageType(GeneralMessageDto.MessageType.TEXT);
         replyDto.setMessageStatus(GeneralMessageDto.MessageStatus.SENT);
         replyDto.setIsStaff(true);
         replyDto.setIsSystemReply(true);
-        replyDto.setStaffLoginId(userId);
+        replyDto.setSenderName(userId);
         replyDto.setQuotedMessageId(incomingDto.getMessageId());
         replyDto.setMessageSource("waba");
         replyDto.setPhoneNumberId(phoneNumberId);

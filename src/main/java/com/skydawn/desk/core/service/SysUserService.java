@@ -1,6 +1,6 @@
 package com.skydawn.desk.core.service;
 
-import com.skydawn.common.crypto.Argon2Crypto;
+import com.skydawn.common.crypto.BcCrypto;
 import com.skydawn.desk.core.entity.SysUser;
 import com.skydawn.desk.core.mapper.SysUserMapper;
 import org.slf4j.Logger;
@@ -50,8 +50,8 @@ public class SysUserService {
             return null;
         }
 
-        // 验证密码
-        if (!Argon2Crypto.verifyPassword(user.getPassword(), password)) {
+        // 验证密码（BcCrypto：明文、密文）
+        if (!BcCrypto.matchesPassword(password, user.getPassword())) {
             log.warn("登录失败 - 密码错误: {}", username);
             return null;
         }

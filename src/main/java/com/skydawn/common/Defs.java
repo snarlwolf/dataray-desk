@@ -7,6 +7,10 @@ package com.skydawn.common;
 public final class Defs {
     private Defs() {}
 
+    /** 本系统的代码，以此取数据库中适合本系统的配置信息 */
+    public static final String SYS_CODE = "skydawn_desk";
+    public static final String ALL = "all";
+
     /** 下游鉴权 Header（建议固定用 Header，不要拼 URL） */
     public static final String HTTP_HEAD_TOKEN_NAME = "X-Skydawn-Token";
 
@@ -21,5 +25,10 @@ public final class Defs {
     public static final String HTTP_HEAD_NONCE = "X-Skydawn-Nonce";
     /** HMAC-SHA256 签名 */
     public static final String HTTP_HEAD_SIGNATURE = "X-Skydawn-Signature";
+
+    /** 全局属性配置 Key 常量 */
+    public static final String PROP_KEY_MESSAGE_ENABLE_PRE = "message.enable.";
+
+    
     
 }

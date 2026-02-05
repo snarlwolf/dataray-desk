@@ -93,7 +93,7 @@ public class TextMessageSenderController {
                 }
                 Object sessionUser = request.getSession().getAttribute(SysUserLoginController.SESSION_USER_KEY);
                 if (sessionUser instanceof SysUser u) {
-                    staffMsg.setStaffLoginId(u.getUserName());
+                    staffMsg.setSenderName(u.getUserName());
                 }
                 redisOperation.appendConversationMessage(conversationId, GSON.toJson(staffMsg));
             } else {
@@ -157,7 +157,7 @@ public class TextMessageSenderController {
         reactionPayload.put("emoji", emoji != null && !emoji.isEmpty() ? emoji : "👍");
         Object sessionUser = request.getSession().getAttribute(SysUserLoginController.SESSION_USER_KEY);
         if (sessionUser instanceof SysUser u) {
-            reactionPayload.put("staffLoginId", u.getUserName());
+            reactionPayload.put("senderName", u.getUserName());
         }
         redisOperation.appendConversationMessage(conversationId, GSON.toJson(reactionPayload));
         return ResponseEntity.ok(result);
