@@ -3,6 +3,13 @@ package com.skydawn.desk.callback.controller;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.skydawn.common.Defs;
+import com.skydawn.desk.core.converter.GeneralMessageToMessageConverter;
+import com.skydawn.redis.CsRedisKeys;
+import com.skydawn.desk.core.entity.Message;
+import com.skydawn.desk.core.mapper.MessageMapper;
+import com.skydawn.desk.core.service.ConversationService;
+import com.skydawn.desk.dto.GeneralMessageDto;
+import com.skydawn.desk.message.waba.WabaToGeneralMessageConverter;
 import com.skydawn.ingest.dto.WabaMessageDto;
 import com.skydawn.ingest.parser.WabaParser;
 import org.slf4j.Logger;
@@ -13,8 +20,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 接收 Relay 转发过来的消息
- * 注意：正式环境中这个接口不会接收任何消息，只是用来测试并解析waba消息的。正式环境过来的消息不会是waba格式。
+ * 接收 Relay 转发过来的消息：仅入库 message 并打日志，不通知客服（不写 Redis、不推 WebSocket）。
+ * 客服端消息由 /message/callback/aisys 等回调负责分配与推送。
  */
 @RestController
 @RequestMapping("/message/callback/relay")
@@ -25,6 +32,14 @@ public class WabaMessageFromRelayController {
 
     @Value("${sys.desk-http-head-token}")
     private String expectedToken;
+
+    private final ConversationService conversationService;
+    private final MessageMapper messageMapper;
+
+    public WabaMessageFromRelayController(ConversationService conversationService, MessageMapper messageMapper) {
+        this.conversationService = conversationService;
+        this.messageMapper = messageMapper;
+    }
 
     /**
      * 接收 Relay 回调消息
@@ -58,6 +73,31 @@ public class WabaMessageFromRelayController {
         dto.setRawJson(null);  // 临时置空，避免日志过长
         log.info("收到消息:\n{}", gson.toJson(dto));
         dto.setRawJson(rawJson);  // 恢复
+
+        // 转 GeneralMessageDto
+        GeneralMessageDto general = WabaToGeneralMessageConverter.fromWaba(dto);
+        // 入库用 redis 会话 id：用 account+clientId 拼装
+        String redisConvId = general.getConversationId();
+        if (redisConvId == null || redisConvId.isBlank()) {
+            redisConvId = CsRedisKeys.formConversationId(general.getOfficialAccount(), general.getClientId());
+        }
+        general.setConversationId(redisConvId); // 供 toMessage 写入 message.redis_conversation_id
+        Long convId = conversationService.getOrCreateByRedisConversationId(redisConvId, general.getOfficialAccount(), "waba");
+        Message msg = GeneralMessageToMessageConverter.toMessage(general, convId, null);
+        // STATUS 去重：同一回调被重复推送或多路转发时只入库一条，避免两条 DELIVERED 等
+        boolean skipInsert = false;
+        if (general.getMessageType() == GeneralMessageDto.MessageType.STATUS) {
+            String srcId = general.getSourceMessageId() != null ? general.getSourceMessageId() : "";
+            int exist = messageMapper.countByRedisConvIdAndSourceMessageIdAndTypeAndStatus(
+                    redisConvId, srcId, "STATUS", general.getMessageStatus() != null ? general.getMessageStatus().name() : "");
+            if (exist > 0) {
+                log.debug("STATUS duplicate skip insert redisConvId={} sourceMessageId={} status={}", redisConvId, srcId, general.getMessageStatus());
+                skipInsert = true;
+            }
+        }
+        if (!skipInsert) {
+            messageMapper.insert(msg);
+        }
 
         return ResponseEntity.ok("success");
     }

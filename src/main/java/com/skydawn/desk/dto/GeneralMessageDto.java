@@ -53,16 +53,16 @@ public class GeneralMessageDto {
     private String messageSource;
 
     // ==================== 基础信息 ====================
-    /** WhatsApp Business Account ID */
+    /** 业务账号 ID */
     private String accountId;
-    /** 显示的电话号码 */
-    private String displayPhoneNumber;
-    /** 电话号码 ID */
-    private String phoneNumberId;
+    /** 对外展示的号码（如公众号/渠道展示号） */
+    private String officialPhoneNumber;
+    /** 推广号/渠道账号 ID（会话路由与回复用） */
+    private String officialAccount;
 
     // ==================== 消息信息 ====================
-    /** 消息 ID */
-    private String messageId;
+    /** 消息在来源侧的 ID */
+    private String sourceMessageId;
     /** 消息类型 */
     private MessageType messageType;
     /** 消息状态 */
@@ -73,12 +73,10 @@ public class GeneralMessageDto {
     // ==================== 发送者/接收者信息 ====================
     /** 会话 ID（推送时由后端填入，用于结束会话/转移） */
     private String conversationId;
-    /** 发送者 ID（WABA手机号、内部用户ID、临时ID等） */
-    private String fromId;
-    /** 发送者昵称 */
-    private String fromProfileName;
-    /** 接收者 ID（状态消息时使用） */
-    private String recipientId;
+    /** 客户/发送方 ID（如渠道侧用户手机号、内部用户ID、临时ID等） */
+    private String clientId;
+    /** 客户/发送方昵称 */
+    private String clientName;
 
     // ==================== 文本内容 ====================
     /** 文本内容 */
@@ -96,13 +94,10 @@ public class GeneralMessageDto {
     /** 媒体标题/说明（图片+文字时的文字） */
     private String mediaCaption;
 
-    /** 被反应的消息 ID（仅 REACTION 类型） */
-    private String reactionMessageId;
-    /** 反应 emoji（如 👍） */
+    /** 被引用消息 ID（回复某条消息或对某条消息点赞时指向的消息） */
+    private String referencedMessageId;
+    /** 反应 emoji（如 👍，仅 REACTION 类型时有值） */
     private String reactionEmoji;
-
-    /** 被回复的消息 ID（对方回复某条消息时，context.id） */
-    private String quotedMessageId;
 
     /** 纬度（位置消息） */
     private Double latitude;
@@ -113,8 +108,8 @@ public class GeneralMessageDto {
     private Boolean isStaff;
     /** 是否为系统自动回复（如“暂不支持您所发送的消息格式！”）；用于更深蓝气泡样式 */
     private Boolean isSystemReply;
-    /** 客服发送时的发送者名称（senderName），写入 Redis 会话消息时记录，便于审计与展示 */
-    private String senderName;
+    /** 客服发送时的发送者名称，写入 Redis 会话消息时记录，便于审计与展示 */
+    private String csStaffName;
     /** 系统自动回复时使用的文案（仅当 messageStatus=UNSUPPORTED 且需与默认「暂不支持」不同的保底文案时设置，如配置缺失时的「非常抱歉，由于未知原因…」） */
     private String unsupportedAutoReplyText;
 
@@ -130,28 +125,28 @@ public class GeneralMessageDto {
         this.accountId = accountId;
     }
 
-    public String getDisplayPhoneNumber() {
-        return displayPhoneNumber;
+    public String getOfficialPhoneNumber() {
+        return officialPhoneNumber;
     }
 
-    public void setDisplayPhoneNumber(String displayPhoneNumber) {
-        this.displayPhoneNumber = displayPhoneNumber;
+    public void setOfficialPhoneNumber(String officialPhoneNumber) {
+        this.officialPhoneNumber = officialPhoneNumber;
     }
 
-    public String getPhoneNumberId() {
-        return phoneNumberId;
+    public String getOfficialAccount() {
+        return officialAccount;
     }
 
-    public void setPhoneNumberId(String phoneNumberId) {
-        this.phoneNumberId = phoneNumberId;
+    public void setOfficialAccount(String officialAccount) {
+        this.officialAccount = officialAccount;
     }
 
-    public String getMessageId() {
-        return messageId;
+    public String getSourceMessageId() {
+        return sourceMessageId;
     }
 
-    public void setMessageId(String messageId) {
-        this.messageId = messageId;
+    public void setSourceMessageId(String sourceMessageId) {
+        this.sourceMessageId = sourceMessageId;
     }
 
     public MessageType getMessageType() {
@@ -186,28 +181,20 @@ public class GeneralMessageDto {
         this.conversationId = conversationId;
     }
 
-    public String getFromId() {
-        return fromId;
+    public String getClientId() {
+        return clientId;
     }
 
-    public void setFromId(String fromId) {
-        this.fromId = fromId;
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
     }
 
-    public String getFromProfileName() {
-        return fromProfileName;
+    public String getClientName() {
+        return clientName;
     }
 
-    public void setFromProfileName(String fromProfileName) {
-        this.fromProfileName = fromProfileName;
-    }
-
-    public String getRecipientId() {
-        return recipientId;
-    }
-
-    public void setRecipientId(String recipientId) {
-        this.recipientId = recipientId;
+    public void setClientName(String clientName) {
+        this.clientName = clientName;
     }
 
     public String getTextBody() {
@@ -258,12 +245,12 @@ public class GeneralMessageDto {
         this.mediaCaption = mediaCaption;
     }
 
-    public String getReactionMessageId() {
-        return reactionMessageId;
+    public String getReferencedMessageId() {
+        return referencedMessageId;
     }
 
-    public void setReactionMessageId(String reactionMessageId) {
-        this.reactionMessageId = reactionMessageId;
+    public void setReferencedMessageId(String referencedMessageId) {
+        this.referencedMessageId = referencedMessageId;
     }
 
     public String getReactionEmoji() {
@@ -272,14 +259,6 @@ public class GeneralMessageDto {
 
     public void setReactionEmoji(String reactionEmoji) {
         this.reactionEmoji = reactionEmoji;
-    }
-
-    public String getQuotedMessageId() {
-        return quotedMessageId;
-    }
-
-    public void setQuotedMessageId(String quotedMessageId) {
-        this.quotedMessageId = quotedMessageId;
     }
 
     public Double getLatitude() {
@@ -314,12 +293,12 @@ public class GeneralMessageDto {
         this.isSystemReply = isSystemReply;
     }
 
-    public String getSenderName() {
-        return senderName;
+    public String getCsStaffName() {
+        return csStaffName;
     }
 
-    public void setSenderName(String senderName) {
-        this.senderName = senderName;
+    public void setCsStaffName(String csStaffName) {
+        this.csStaffName = csStaffName;
     }
 
     public String getUnsupportedAutoReplyText() {
@@ -341,33 +320,19 @@ public class GeneralMessageDto {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("GeneralMessageDto{");
-        sb.append("messageId='").append(messageId).append('\'');
+        sb.append("sourceMessageId='").append(sourceMessageId).append('\'');
         sb.append(", messageType=").append(messageType);
         sb.append(", messageStatus=").append(messageStatus);
         sb.append(", timestamp=").append(timestamp);
-        sb.append(", fromId='").append(fromId).append('\'');
-        sb.append(", fromProfileName='").append(fromProfileName).append('\'');
-        
-        // 文本内容
-        if (textBody != null) {
-            sb.append(", textBody='").append(textBody).append('\'');
-        }
-        
-        // 媒体内容
+        sb.append(", clientId='").append(clientId).append('\'');
+        sb.append(", clientName='").append(clientName).append('\'');
+        if (textBody != null) sb.append(", textBody='").append(textBody).append('\'');
         if (mediaId != null) {
             sb.append(", mediaId='").append(mediaId).append('\'');
             sb.append(", mediaUrl='").append(mediaUrl).append('\'');
             sb.append(", mediaMimeType='").append(mediaMimeType).append('\'');
-            if (mediaCaption != null) {
-                sb.append(", mediaCaption='").append(mediaCaption).append('\'');
-            }
+            if (mediaCaption != null) sb.append(", mediaCaption='").append(mediaCaption).append('\'');
         }
-        
-        // 状态消息相关
-        if (recipientId != null) {
-            sb.append(", recipientId='").append(recipientId).append('\'');
-        }
-        
         sb.append('}');
         return sb.toString();
     }

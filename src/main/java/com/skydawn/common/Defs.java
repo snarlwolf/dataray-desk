@@ -28,7 +28,9 @@ public final class Defs {
 
     /** 全局属性配置 Key 常量 */
     public static final String PROP_KEY_MESSAGE_ENABLE_PRE = "message.enable.";
+    /** 客服最大同时会话数配置 key，默认 20 */
+    public static final String PROP_KEY_DESK_CONVERSATION_MAX_COUNT = "desk.conversation.max-count";
+    /** 客服离线多少秒后自动转移其会话，未配置时默认 500 秒 */
+    public static final String PROP_KEY_DESK_OFFLINE_KEEP_CONVERSATION = "desk.unline.keep-conversation";
 
-    
-    
 }

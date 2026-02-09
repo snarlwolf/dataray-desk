@@ -5,6 +5,13 @@ var REACTION_EMOJIS = ['👍','❤️','😂','😮','😢','🙏'];
 if (typeof axios !== 'undefined') {
     axios.defaults.xsrfCookieName = 'XSRF-TOKEN';
     axios.defaults.xsrfHeaderName = 'X-XSRF-TOKEN';
+    // 任意接口返回 401 时跳转登录页（会话过期或未登录）
+    axios.interceptors.response.use(function(res) { return res; }, function(err) {
+        if (err.response && err.response.status === 401) {
+            window.location.href = '/csdesk/cserviceLogin.html';
+        }
+        return Promise.reject(err);
+    });
 }
 
 new Vue({
@@ -19,9 +26,9 @@ new Vue({
         conversationList: [],
         colleaguesList: [],
         selectedConversationId: null,
-        selectedFromId: null,
+        selectedClientId: null,
         ws: null,
-        /** 按会话 key(conversationId||fromId) 存储消息列表 */
+        /** 按会话 key(conversationId||clientId) 存储消息列表 */
         messageListByConversation: {},
         /** 发送框输入内容 */
         sendText: '',
@@ -46,24 +53,27 @@ new Vue({
         reactionPickerFor: null,
         /** 收到消息提示音：单例 Audio，避免重叠播放 */
         _receivedSoundAudio: null,
-        _receivedSoundPlaying: false
+        _receivedSoundPlaying: false,
+        /** 已读：已向服务端发送过 read 的 messageId，key=conversationId，value={ messageId: true } */
+        wabaReadSentForMessageIds: {},
+        _wabaReadObserver: null
     },
     computed: {
         pageTitle: function() {
             return this.t('pageTitle');
         },
         currentMessages: function() {
-            var key = this.selectedConversationId || this.selectedFromId;
+            var key = this.selectedConversationId || this.selectedClientId;
             if (!key) return [];
             return this.messageListByConversation[key] || [];
         },
         selectedConversationDisplayName: function() {
             var id = this.selectedConversationId;
-            var fromId = this.selectedFromId;
+            var clientId = this.selectedClientId;
             var item = this.conversationList.find(function(c) {
-                return c.id === id || c.fromId === fromId;
+                return c.id === id || c.clientId === clientId;
             });
-            return item ? (item.displayName || item.fromId || id || fromId || '') : (fromId || id || '');
+            return item ? (item.displayName || item.clientId || id || clientId || '') : (clientId || id || '');
         },
         conversationUnreadTotal: function() {
             return this.conversationList.reduce(function(sum, item) {
@@ -94,6 +104,7 @@ new Vue({
             this.$nextTick(function() {
                 var el = self.$refs.messageList;
                 if (el) el.scrollTop = el.scrollHeight;
+                self.setupWabaReadObserver();
             });
         }
     },
@@ -118,6 +129,10 @@ new Vue({
         });
     },
     beforeDestroy: function() {
+        if (this._wabaReadObserver) {
+            this._wabaReadObserver.disconnect();
+            this._wabaReadObserver = null;
+        }
         if (this._langSelectApi && this._langSelectApi.destroy) this._langSelectApi.destroy();
         if (this._wsHeartbeatIntervalId) {
             clearInterval(this._wsHeartbeatIntervalId);
@@ -136,7 +151,7 @@ new Vue({
             this.lang = I18N_CONSOLE.setLang(lang);
         },
         getLastCustomerMessagePreview: function(item) {
-            var key = item.id || item.fromId;
+            var key = item.id || item.clientId;
             var list = this.messageListByConversation[key] || [];
             var msg = null;
             for (var i = list.length - 1; i >= 0; i--) {
@@ -187,21 +202,22 @@ new Vue({
                     var conversations = res.data.conversations;
                     if (conversations.length === 0) return;
                     conversations.forEach(function(conv) {
-                        var convId = conv.id || conv.fromId;
+                        var convId = conv.id || conv.clientId;
+                        var clientIdVal = conv.clientId != null ? conv.clientId : convId;
                         if (!convId) return;
-                        var exists = self.conversationList.some(function(c) { return (c.id || c.fromId) === convId; });
+                        var exists = self.conversationList.some(function(c) { return (c.id || c.clientId) === convId; });
                         if (!exists) {
                             self.conversationList.push({
                                 id: convId,
-                                fromId: convId,
-                                displayName: conv.displayName || convId,
+                                clientId: clientIdVal,
+                                displayName: conv.displayName || clientIdVal,
                                 unread: 0
                             });
                         }
                         self.$set(self.messageListByConversation, convId, []);
                     });
                     conversations.forEach(function(conv) {
-                        var convId = conv.id || conv.fromId;
+                        var convId = conv.id || conv.clientId;
                         if (!convId) return;
                         axios.get('/desk/conversation/messages', { params: { conversationId: convId } })
                             .then(function(msgRes) {
@@ -223,29 +239,13 @@ new Vue({
                                             return;
                                         }
                                         var rawMediaUrl = msg.mediaUrl || msg.media_url || null;
-                                        list.push({
-                                            messageId: msg.messageId || null,
-                                            textBody: msg.textBody || '',
-                                            fromId: msg.fromId || '',
-                                            fromProfileName: msg.fromProfileName || msg.fromId || '',
-                                            isStaff: msg.isStaff === true,
-                                            isSystemReply: msg.isSystemReply === true,
-                                            senderName: msg.senderName || msg.sender_name || null,
-                                            timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
-                                            messageType: msg.messageType || 'TEXT',
-                                            messageStatus: msg.messageStatus || null,
-                                            mediaUrl: rawMediaUrl,
-                                            mediaCaption: msg.mediaCaption || msg.media_caption || null,
-                                            reactions: msg.reactions || [],
-                                            quotedMessageId: msg.quotedMessageId || null,
-                                            latitude: msg.latitude != null ? msg.latitude : null,
-                                            longitude: msg.longitude != null ? msg.longitude : null
-                                        });
+                                        list.push(self.normalizeMessageForList(msg, rawMediaUrl));
                                         var status = msg.messageStatus || '';
-                                        if ((status === 'NORMAL' || status === 'UNSUPPORTED') && (msg.fromProfileName || msg.fromId)) {
-                                            var item = self.conversationList.find(function(c) { return (c.id || c.fromId) === convId; });
-                                            if (item && (item.displayName === convId || item.displayName === item.fromId || !item.displayName)) {
-                                                self.$set(item, 'displayName', msg.fromProfileName || msg.fromId || convId);
+                                        var clientName = msg.clientName || msg.clientId;
+                                        if ((status === 'NORMAL' || status === 'UNSUPPORTED') && clientName) {
+                                            var item = self.conversationList.find(function(c) { return (c.id || c.clientId) === convId; });
+                                            if (item && (item.displayName === convId || item.displayName === item.clientId || !item.displayName)) {
+                                                self.$set(item, 'displayName', clientName || convId);
                                             }
                                         }
                                     } catch (e) {
@@ -310,26 +310,9 @@ new Vue({
                                 if (msg.kind === 'message_status') { pendingStatus.push(msg); return; }
                                 if (msg.kind === 'reaction') { pendingReaction.push(msg); return; }
                                 var rawMediaUrl = msg.mediaUrl || msg.media_url || null;
-                                list.push({
-                                    messageId: msg.messageId || null,
-                                    textBody: msg.textBody || '',
-                                    fromId: msg.fromId || '',
-                                    fromProfileName: msg.fromProfileName || msg.fromId || '',
-                                    isStaff: msg.isStaff === true,
-                                    isSystemReply: msg.isSystemReply === true,
-                                    senderName: msg.senderName || msg.sender_name || null,
-                                    timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
-                                    messageType: msg.messageType || 'TEXT',
-                                    messageStatus: msg.messageStatus || null,
-                                    mediaUrl: rawMediaUrl,
-                                    mediaCaption: msg.mediaCaption || msg.media_caption || null,
-                                    reactions: msg.reactions || [],
-                                    quotedMessageId: msg.quotedMessageId || null,
-                                    latitude: msg.latitude != null ? msg.latitude : null,
-                                    longitude: msg.longitude != null ? msg.longitude : null
-                                });
-                                if ((msg.messageStatus === 'NORMAL' || msg.messageStatus === 'UNSUPPORTED') && (msg.fromProfileName || msg.fromId)) {
-                                    displayName = msg.fromProfileName || msg.fromId || displayName;
+                                list.push(self.normalizeMessageForList(msg, rawMediaUrl));
+                                if ((msg.messageStatus === 'NORMAL' || msg.messageStatus === 'UNSUPPORTED') && (msg.clientName || msg.clientId)) {
+                                    displayName = msg.clientName || msg.clientId || displayName;
                                 }
                             } catch (e) { console.error('Parse message error', e); }
                         });
@@ -361,23 +344,47 @@ new Vue({
                         });
                     }
                     self.$set(self.messageListByConversation, key, list);
+                    var clientIdVal = fromId;
                     self.conversationList.push({
-                        id: conversationId || fromId,
-                        fromId: fromId,
-                        displayName: (displayName && (messageStatus === 'NORMAL' || messageStatus === 'UNSUPPORTED')) ? displayName : (fromId || conversationId || ''),
+                        id: conversationId || clientIdVal,
+                        clientId: clientIdVal,
+                        displayName: (displayName && (messageStatus === 'NORMAL' || messageStatus === 'UNSUPPORTED')) ? displayName : (clientIdVal || conversationId || ''),
                         unread: 1
                     });
                 })
                 .catch(function(err) {
                     console.error('Load messages for new conversation ' + key, err);
                     self.$set(self.messageListByConversation, key, []);
+                    var clientIdVal = fromId;
                     self.conversationList.push({
-                        id: conversationId || fromId,
-                        fromId: fromId,
-                        displayName: displayName || fromId || conversationId || '',
+                        id: conversationId || clientIdVal,
+                        clientId: clientIdVal,
+                        displayName: displayName || clientIdVal || conversationId || '',
                         unread: 1
                     });
                 });
+        },
+        /** 将服务端/Redis 消息 JSON 规范为列表项（仅使用新字段名） */
+        normalizeMessageForList: function(msg, rawMediaUrl) {
+            if (!msg) return {};
+            return {
+                messageId: msg.sourceMessageId || null,
+                textBody: msg.textBody || '',
+                clientId: msg.clientId || '',
+                clientName: msg.clientName || '',
+                isStaff: msg.isStaff === true,
+                isSystemReply: msg.isSystemReply === true,
+                csStaffName: msg.csStaffName || null,
+                timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
+                messageType: msg.messageType || 'TEXT',
+                messageStatus: msg.messageStatus || null,
+                mediaUrl: rawMediaUrl != null ? rawMediaUrl : (msg.mediaUrl || null),
+                mediaCaption: msg.mediaCaption || null,
+                reactions: msg.reactions || [],
+                referencedMessageId: msg.referencedMessageId || null,
+                latitude: msg.latitude != null ? msg.latitude : null,
+                longitude: msg.longitude != null ? msg.longitude : null
+            };
         },
         connectWebSocket: function() {
             var self = this;
@@ -397,6 +404,14 @@ new Vue({
                         if (self.ws && self.ws.readyState === WebSocket.OPEN) {
                             self.ws.send(JSON.stringify({ kind: 'ping' }));
                         }
+                        // 心跳时检查会话是否过期（后台登录状态 / Redis 侧踢下线后由 4000 关闭 WS，此处兜底如 currentUser 失败）
+                        axios.get('/desk/currentUser').then(function(res) {
+                            if (!res.data.success) {
+                                window.location.href = '/csdesk/cserviceLogin.html';
+                            }
+                        }).catch(function() {
+                            window.location.href = '/csdesk/cserviceLogin.html';
+                        });
                     }, HEARTBEAT_INTERVAL_MS);
                 };
                 self.ws.onmessage = function(ev) {
@@ -441,13 +456,13 @@ new Vue({
                             }
                             return;
                         }
-                        var fromId = msg.fromId || '';
+                        var clientIdVal = msg.clientId || '';
                         var conversationId = msg.conversationId || '';
-                        var displayName = msg.fromProfileName || fromId;
-                        var key = conversationId || fromId;
+                        var displayName = msg.clientName || clientIdVal;
+                        var key = conversationId || clientIdVal;
                         var item = self.conversationList.find(function(c) {
-                            var cKey = c.id || c.fromId;
-                            return cKey === key || cKey === conversationId || cKey === fromId;
+                            var cKey = c.id || c.clientId;
+                            return cKey === key || cKey === conversationId || cKey === clientIdVal;
                         });
                         if (item) {
                             var list = self.messageListByConversation[key];
@@ -455,33 +470,15 @@ new Vue({
                                 self.$set(self.messageListByConversation, key, []);
                                 list = self.messageListByConversation[key];
                             }
-                            var rawMediaUrl = msg.mediaUrl || msg.media_url || null;
-                            list.push({
-                                messageId: msg.messageId || null,
-                                textBody: msg.textBody || '',
-                                fromId: fromId,
-                                fromProfileName: displayName,
-                                isStaff: msg.isStaff === true,
-                                isSystemReply: msg.isSystemReply === true,
-                                senderName: msg.senderName || msg.sender_name || null,
-                                timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
-                                messageType: msg.messageType || 'TEXT',
-                                messageStatus: msg.messageStatus || null,
-                                mediaUrl: rawMediaUrl,
-                                mediaCaption: msg.mediaCaption || msg.media_caption || null,
-                                reactions: [],
-                                quotedMessageId: msg.quotedMessageId || null,
-                                latitude: msg.latitude != null ? msg.latitude : null,
-                                longitude: msg.longitude != null ? msg.longitude : null
-                            });
-                            var isCurrentConversation = (key === self.selectedConversationId || key === self.selectedFromId);
+                            var rawMediaUrl = msg.mediaUrl || null;
+                            list.push(self.normalizeMessageForList(msg, rawMediaUrl));
+                            var isCurrentConversation = (key === self.selectedConversationId || key === self.selectedClientId);
                             self.$set(item, 'unread', isCurrentConversation ? 0 : (item.unread || 0) + 1);
                             if (conversationId) item.id = conversationId;
-                            if (fromId) item.fromId = fromId;
+                            if (clientIdVal) item.clientId = clientIdVal;
                         } else {
-                            // 新会话（如从 AISYSTEM/TRANSFERING 重新分配）：先拉取该会话全部历史消息再展示，再将会话加入列表
                             if (msg.isStaff !== true) self.playReceivedSound();
-                            self.loadConversationMessagesThenAddConversation(key, conversationId, fromId, displayName, msg.messageStatus);
+                            self.loadConversationMessagesThenAddConversation(key, conversationId, clientIdVal, displayName, msg.messageStatus);
                         }
                     } catch (e) {
                         console.error('WebSocket message parse error', e);
@@ -525,8 +522,58 @@ new Vue({
         },
         selectConversation: function(item) {
             this.selectedConversationId = item.id;
-            this.selectedFromId = item.fromId;
+            this.selectedClientId = item.clientId;
             this.$set(item, 'unread', 0);
+            var self = this;
+            this.$nextTick(function() { self.setupWabaReadObserver(); });
+        },
+        /**
+         * 当客服点开会话且客户消息滚入可视区时，才向 WABA 发送已读状态（POST /desk/status/read）。
+         * 使用 Intersection Observer，root 为消息列表容器。
+         */
+        setupWabaReadObserver: function() {
+            var self = this;
+            if (this._wabaReadObserver) {
+                this._wabaReadObserver.disconnect();
+                this._wabaReadObserver = null;
+            }
+            var listEl = this.$refs.messageList;
+            var convId = this.selectedConversationId || this.selectedClientId;
+            if (!listEl || !convId) return;
+            var rows = listEl.querySelectorAll('.chat-message-row[data-is-customer="true"]');
+            if (rows.length === 0) return;
+            this._wabaReadObserver = new IntersectionObserver(function(entries) {
+                var currentConvId = self.selectedConversationId || self.selectedClientId;
+                if (currentConvId !== convId) return;
+                var toSend = [];
+                var observedTargets = [];
+                entries.forEach(function(entry) {
+                    if (!entry.isIntersecting) return;
+                    var msgId = entry.target.getAttribute('data-message-id');
+                    if (!msgId) return;
+                    var sent = self.wabaReadSentForMessageIds[currentConvId] && self.wabaReadSentForMessageIds[currentConvId][msgId];
+                    if (sent) return;
+                    toSend.push(msgId);
+                    observedTargets.push(entry.target);
+                });
+                if (toSend.length === 0) return;
+                toSend.forEach(function(msgId) {
+                    if (!self.wabaReadSentForMessageIds[currentConvId]) self.$set(self.wabaReadSentForMessageIds, currentConvId, {});
+                    self.$set(self.wabaReadSentForMessageIds[currentConvId], msgId, true);
+                });
+                observedTargets.forEach(function(target) {
+                    if (self._wabaReadObserver) self._wabaReadObserver.unobserve(target);
+                });
+                axios.post('/desk/status/read', { conversationId: currentConvId, messageIds: toSend })
+                    .then(function() {})
+                    .catch(function(err) { console.warn('WABA markAsRead request failed', err); });
+            }, { root: listEl, rootMargin: '0px', threshold: 0.1 });
+            rows.forEach(function(row) {
+                var msgId = row.getAttribute('data-message-id');
+                if (msgId && (!self.wabaReadSentForMessageIds[convId] || !self.wabaReadSentForMessageIds[convId][msgId])) {
+                    self._wabaReadObserver.observe(row);
+                }
+            });
         },
         sendMessage: function() {
             var self = this;
@@ -540,18 +587,18 @@ new Vue({
                 Dialog.alert({ title: this.t('alertTitle'), message: this.t('selectConversationFirst') });
                 return;
             }
-            var quotedMessageId = self.replyingTo ? self.replyingTo.messageId : null;
+            var referencedMessageId = self.replyingTo ? self.replyingTo.messageId : null;
             this.sending = true;
             var payload = {
                 conversationId: this.selectedConversationId,
                 textBody: text,
-                fromId: this.selectedFromId
+                clientId: this.selectedClientId
             };
-            if (quotedMessageId) payload.quotedMessageId = quotedMessageId;
+            if (referencedMessageId) payload.referencedMessageId = referencedMessageId;
             axios.post('/desk/message/send', payload)
                 .then(function(res) {
                     if (res.data.success) {
-                        var key = self.selectedConversationId || self.selectedFromId;
+                        var key = self.selectedConversationId || self.selectedClientId;
                         if (!self.messageListByConversation[key]) {
                             self.$set(self.messageListByConversation, key, []);
                         }
@@ -559,19 +606,29 @@ new Vue({
                             messageId: res.data.messageId || null,
                             textBody: text,
                             isStaff: true,
-                            senderName: self.username,
+                            csStaffName: self.username,
                             timestamp: Date.now(),
                             messageStatus: null,
-                            quotedMessageId: quotedMessageId || null
+                            referencedMessageId: referencedMessageId || null
                         });
                         self.sendText = '';
                         self.replyingTo = null;
                     } else {
-                        Dialog.alert({ title: self.t('sendFailed'), message: res.data.message || self.t('sendFailed') });
+                        var msg = res.data.message || '';
+                        if (msg === 'Not logged in' || (msg && msg.toLowerCase().indexOf('logged') !== -1)) {
+                            Dialog.alert({ title: self.t('loginExpired'), message: self.t('loginExpiredMessage') }).then(function() {
+                                window.location.href = '/csdesk/cserviceLogin.html';
+                            });
+                        } else {
+                            Dialog.alert({ title: self.t('sendFailed'), message: msg || self.t('sendFailed') });
+                        }
                     }
                 })
                 .catch(function(err) {
                     console.error('Send message error', err);
+                    if (err.response && err.response.status === 401) {
+                        return;
+                    }
                     Dialog.alert({ title: self.t('sendFailed'), message: self.t('sendFailed') });
                 })
                 .finally(function() {
@@ -582,11 +639,11 @@ new Vue({
             if (!conversationId) return;
             this.$delete(this.messageListByConversation, conversationId);
             this.conversationList = this.conversationList.filter(function(c) {
-                return (c.id || c.fromId) !== conversationId;
+                return (c.id || c.clientId) !== conversationId;
             });
-            if (this.selectedConversationId === conversationId || this.selectedFromId === conversationId) {
+            if (this.selectedConversationId === conversationId || this.selectedClientId === conversationId) {
                 this.selectedConversationId = null;
-                this.selectedFromId = null;
+                this.selectedClientId = null;
             }
         },
         formatMessageTime: function(ts) {
@@ -630,12 +687,12 @@ new Vue({
                 }
             });
         },
-        /** 被回复消息的预览文案（从当前会话消息列表查找原消息） */
-        getQuotedPreview: function(quotedMessageId) {
-            if (!quotedMessageId) return this.t('quotedMessage');
+        /** 被引用消息的预览文案（从当前会话消息列表查找原消息） */
+        getReferencedPreview: function(referencedMessageId) {
+            if (!referencedMessageId) return this.t('quotedMessage');
             var list = this.currentMessages;
             for (var i = 0; i < list.length; i++) {
-                if (list[i].messageId === quotedMessageId) {
+                if (list[i].messageId === referencedMessageId) {
                     var s = list[i].textBody || list[i].mediaCaption || '';
                     if (s) return s.length > 50 ? s.slice(0, 50) + '…' : s;
                     return this.t('quotedMessage');
@@ -789,12 +846,12 @@ new Vue({
                 return;
             }
             var convId = this.selectedConversationId;
-            var fromId = self.selectedFromId || convId;
+            var clientIdVal = self.selectedClientId || convId;
             var item = this.conversationList.find(function(c) {
-                return c.id === convId || c.fromId === self.selectedFromId;
+                return c.id === convId || c.clientId === self.selectedClientId;
             });
-            var nickname = item ? (item.displayName || item.fromId || fromId) : fromId;
-            var msg = self.t('confirmEndMessage').replace('{nickname}', nickname).replace('{fromId}', fromId);
+            var nickname = item ? (item.displayName || item.clientId || clientIdVal) : clientIdVal;
+            var msg = self.t('confirmEndMessage').replace('{nickname}', nickname).replace('{clientId}', clientIdVal);
             Dialog.confirm({
                 title: self.t('confirmEndTitle'),
                 message: msg

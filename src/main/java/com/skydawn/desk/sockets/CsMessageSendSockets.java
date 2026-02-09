@@ -28,6 +28,8 @@ public class CsMessageSendSockets {
     public static final int CLOSE_LOGGED_IN_ELSEWHERE = 4000;
 
     private final Map<String, WebSocketSession> userIdToSession = new ConcurrentHashMap<>();
+    /** 按 userId 串行化发送，避免同一会话并发 sendMessage 导致 TEXT_PARTIAL_WRITING 异常 */
+    private final Map<String, Object> sendLocks = new ConcurrentHashMap<>();
     private final RedisOperation redisOperation;
 
     public CsMessageSendSockets(RedisOperation redisOperation) {
@@ -74,23 +76,32 @@ public class CsMessageSendSockets {
         WebSocketSession current = userIdToSession.get(Objects.requireNonNull(userId));
         if (current == closedSession) {
             userIdToSession.remove(userId);
+            sendLocks.remove(userId);
             log.info("WebSocket unregistered for userId={}", userId);
         }
     }
 
     /**
      * 向指定用户推送文本消息；若该用户未连接则返回 false。
+     * 按 userId 串行发送，避免同一会话并发 sendMessage 触发 IllegalStateException(TEXT_PARTIAL_WRITING)。
      */
     public boolean sendToUser(String userId, String text) {
         if (userId == null || text == null) return false;
         WebSocketSession session = userIdToSession.get(Objects.requireNonNull(userId));
         if (session == null || !session.isOpen()) return false;
-        try {
-            session.sendMessage(new TextMessage(Objects.requireNonNull(text)));
-            return true;
-        } catch (IOException e) {
-            log.warn("sendToUser failed userId={}", userId, e);
-            return false;
+        Object lock = sendLocks.computeIfAbsent(userId, k -> new Object());
+        synchronized (lock) {
+            if (!session.isOpen()) return false;
+            try {
+                session.sendMessage(new TextMessage(Objects.requireNonNull(text)));
+                return true;
+            } catch (IOException e) {
+                log.warn("sendToUser failed userId={}", userId, e);
+                return false;
+            } catch (IllegalStateException e) {
+                log.warn("sendToUser endpoint busy (concurrent send?) userId={}", userId, e);
+                return false;
+            }
         }
     }
 

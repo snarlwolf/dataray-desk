@@ -1,7 +1,11 @@
 package com.skydawn.desk.core.controller;
 
 import com.google.gson.Gson;
+import com.skydawn.desk.core.converter.GeneralMessageToMessageConverter;
+import com.skydawn.desk.core.entity.Message;
 import com.skydawn.desk.core.entity.SysUser;
+import com.skydawn.desk.core.mapper.MessageMapper;
+import com.skydawn.desk.core.service.ConversationService;
 import com.skydawn.desk.dto.GeneralMessageDto;
 import com.skydawn.desk.message.waba.WabaMessageSender;
 import com.skydawn.desk.message.waba.WabaSenderDto;
@@ -29,16 +33,21 @@ public class TextMessageSenderController {
     private final RedisFinder redisFinder;
     private final RedisOperation redisOperation;
     private final WabaMessageSender wabaMessageSender;
+    private final ConversationService conversationService;
+    private final MessageMapper messageMapper;
 
-    public TextMessageSenderController(RedisFinder redisFinder, RedisOperation redisOperation, WabaMessageSender wabaMessageSender) {
+    public TextMessageSenderController(RedisFinder redisFinder, RedisOperation redisOperation, WabaMessageSender wabaMessageSender,
+                                      ConversationService conversationService, MessageMapper messageMapper) {
         this.redisFinder = redisFinder;
         this.redisOperation = redisOperation;
         this.wabaMessageSender = wabaMessageSender;
+        this.conversationService = conversationService;
+        this.messageMapper = messageMapper;
     }
 
     /**
      * 发送回复消息
-     * POST /desk/message/send  body: GeneralMessageDto（conversationId、textBody 必填；fromId 可由后端从 Redis 取）
+     * POST /desk/message/send  body: GeneralMessageDto（conversationId、textBody 必填；clientId 可由后端从 Redis 取）
      */
     @PostMapping("/message/send")
     public ResponseEntity<Map<String, Object>> sendMessage(@RequestBody GeneralMessageDto dto, HttpServletRequest request) {
@@ -60,16 +69,16 @@ public class TextMessageSenderController {
         }
         String type = redisFinder.getConversationType(conversationId);
         if ("waba".equalsIgnoreCase(type)) {
-            String fromId = redisFinder.getConversationFromId(conversationId);
-            String phoneNumberId = redisFinder.getConversationPhone(conversationId);
-            if (fromId == null || fromId.isBlank() || phoneNumberId == null || phoneNumberId.isBlank()) {
+            String clientId = redisFinder.getConversationFromId(conversationId);
+            String officialAccount = redisFinder.getConversationPhone(conversationId);
+            if (clientId == null || clientId.isBlank() || officialAccount == null || officialAccount.isBlank()) {
                 result.put("success", false);
-                result.put("message", "conversation fromId or phoneNumberId missing");
+                result.put("message", "conversation clientId or officialAccount missing");
                 return ResponseEntity.ok(result);
             }
-            WabaSenderDto wabaDto = new WabaSenderDto(fromId, textBody, phoneNumberId);
-            if (dto != null && dto.getQuotedMessageId() != null && !dto.getQuotedMessageId().isBlank()) {
-                wabaDto.setContextMessageId(dto.getQuotedMessageId());
+            WabaSenderDto wabaDto = new WabaSenderDto(clientId, textBody, officialAccount);
+            if (dto != null && dto.getReferencedMessageId() != null && !dto.getReferencedMessageId().isBlank()) {
+                wabaDto.setContextMessageId(dto.getReferencedMessageId());
             }
             var wabaResp = wabaMessageSender.sendWabaTextMessage(wabaDto);
             if (wabaResp != null) {
@@ -79,23 +88,31 @@ public class TextMessageSenderController {
                 }
                 GeneralMessageDto staffMsg = new GeneralMessageDto();
                 staffMsg.setConversationId(conversationId);
-                staffMsg.setFromId(fromId);
+                staffMsg.setClientId(clientId);
                 staffMsg.setTextBody(textBody);
-                staffMsg.setMessageId(wabaResp.getMessageId());
+                staffMsg.setSourceMessageId(wabaResp.getMessageId());
                 staffMsg.setTimestamp(System.currentTimeMillis() / 1000);
                 staffMsg.setMessageType(GeneralMessageDto.MessageType.TEXT);
                 staffMsg.setMessageStatus(GeneralMessageDto.MessageStatus.SENT);
                 staffMsg.setIsStaff(true);
                 staffMsg.setMessageSource("waba");
-                staffMsg.setPhoneNumberId(phoneNumberId);
-                if (dto != null && dto.getQuotedMessageId() != null && !dto.getQuotedMessageId().isBlank()) {
-                    staffMsg.setQuotedMessageId(dto.getQuotedMessageId());
+                staffMsg.setOfficialAccount(officialAccount);
+                if (dto != null && dto.getReferencedMessageId() != null && !dto.getReferencedMessageId().isBlank()) {
+                    staffMsg.setReferencedMessageId(dto.getReferencedMessageId());
                 }
                 Object sessionUser = request.getSession().getAttribute(SysUserLoginController.SESSION_USER_KEY);
+                String staffUserName = null;
                 if (sessionUser instanceof SysUser u) {
-                    staffMsg.setSenderName(u.getUserName());
+                    staffMsg.setCsStaffName(u.getUserName());
+                    staffUserName = u.getUserName();
                 }
                 redisOperation.appendConversationMessage(conversationId, GSON.toJson(staffMsg));
+                // 客服回复同时入库 message
+                Long convId = conversationService.getOrCreateByRedisConversationId(conversationId, officialAccount, "waba");
+                Message msg = GeneralMessageToMessageConverter.toMessage(staffMsg, convId, null);
+                msg.setIsStaff(1);
+                msg.setSysUserId(staffUserName);
+                messageMapper.insert(msg);
             } else {
                 log.warn("WABA send failed conversationId={}", conversationId);
                 result.put("success", false);
@@ -136,14 +153,14 @@ public class TextMessageSenderController {
             result.put("message", "Unsupported conversation type");
             return ResponseEntity.ok(result);
         }
-        String fromId = redisFinder.getConversationFromId(conversationId);
-        String phoneNumberId = redisFinder.getConversationPhone(conversationId);
-        if (fromId == null || fromId.isBlank() || phoneNumberId == null || phoneNumberId.isBlank()) {
+        String clientId = redisFinder.getConversationFromId(conversationId);
+        String officialAccount = redisFinder.getConversationPhone(conversationId);
+        if (clientId == null || clientId.isBlank() || officialAccount == null || officialAccount.isBlank()) {
             result.put("success", false);
-            result.put("message", "conversation fromId or phoneNumberId missing");
+            result.put("message", "conversation clientId or officialAccount missing");
             return ResponseEntity.ok(result);
         }
-        boolean ok = wabaMessageSender.sendReaction(phoneNumberId, fromId, messageId, emoji);
+        boolean ok = wabaMessageSender.sendReaction(officialAccount, clientId, messageId, emoji);
         result.put("success", ok);
         if (!ok) {
             result.put("message", "WABA send reaction failed");
@@ -157,7 +174,7 @@ public class TextMessageSenderController {
         reactionPayload.put("emoji", emoji != null && !emoji.isEmpty() ? emoji : "👍");
         Object sessionUser = request.getSession().getAttribute(SysUserLoginController.SESSION_USER_KEY);
         if (sessionUser instanceof SysUser u) {
-            reactionPayload.put("senderName", u.getUserName());
+            reactionPayload.put("csStaffName", u.getUserName());
         }
         redisOperation.appendConversationMessage(conversationId, GSON.toJson(reactionPayload));
         return ResponseEntity.ok(result);

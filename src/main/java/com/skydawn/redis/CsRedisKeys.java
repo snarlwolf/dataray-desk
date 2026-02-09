@@ -20,11 +20,14 @@ public final class CsRedisKeys {
     public static final String CONVERSATION_PHONE = PREFIX + "conversation-phone:";
     /** 会话消息列表（LIST，每条为 JSON；结束会话时删除） */
     public static final String CONVERSATION_MESSAGES = PREFIX + "conversation-messages:";
-    public static final String MESSAGE_QUEUE = PREFIX + "message-queue:";
-    public static final String MESSAGE_QUEUE_FROMIDS = PREFIX + "message-queue-fromids";
+    /** Redis 会话 id -> 库表 conversation.id（仅缓存，不入 conversation 表，供消息入库时查 conversation_id） */
+    public static final String CONVERSATION_DB_ID = PREFIX + "conversation-db-id:";
     public static final String LOCK_FROM = PREFIX + "lock:from:";
     public static final String LOCK_CONVERSATION = PREFIX + "lock:conversation:";
     public static final String LOCK_TRANSFER = PREFIX + "lock:transfer:";
+
+    /** 客服负载 ZSET：member=userId(登录名)，score=当前会话数；用于 ZRANGE 0 0 取负载最小 */
+    public static final String LOAD_ZSET = PREFIX + "load:zset";
 
     /** Redis Pub/Sub 频道：同账号在其他实例新建立 WebSocket 时，通知其他实例关闭该客服（登录名）的旧连接 */
     public static final String CHANNEL_WS_CLOSE_ELSEWHERE = PREFIX + "ws:close-elsewhere";
@@ -59,10 +62,18 @@ public final class CsRedisKeys {
     public static String conversationType(String conversationId) { return CONVERSATION_TYPE + StringTools.escapeForRedisKeySegment(conversationId); }
     public static String conversationPhone(String conversationId) { return CONVERSATION_PHONE + StringTools.escapeForRedisKeySegment(conversationId); }
     public static String conversationMessages(String conversationId) { return CONVERSATION_MESSAGES + StringTools.escapeForRedisKeySegment(conversationId); }
-    public static String messageQueue(String fromId) { return MESSAGE_QUEUE + StringTools.escapeForRedisKeySegment(fromId); }
+    /** Redis 会话 id 对应库表 conversation.id 的缓存 key */
+    public static String conversationDbId(String redisConversationId) { return CONVERSATION_DB_ID + StringTools.escapeForRedisKeySegment(redisConversationId); }
     public static String lockFrom(String fromId) { return LOCK_FROM + StringTools.escapeForRedisKeySegment(fromId); }
     public static String lockConversation(String conversationId) { return LOCK_CONVERSATION + StringTools.escapeForRedisKeySegment(conversationId); }
     public static String lockTransfer(String userId) { return LOCK_TRANSFER + StringTools.escapeForRedisKeySegment(userId); }
+
+    // ---------- 待分配会话队列（desk:uq:），FIFO + 去重 ----------
+    private static final String UQ_PREFIX = "desk:uq:";
+    /** 待分配会话 LIST，FIFO */
+    public static final String PENDING_CONVERSATIONS_LIST = UQ_PREFIX + "pending-conversations:list";
+    /** 待分配会话 SET，用于去重 */
+    public static final String PENDING_CONVERSATIONS_SET = UQ_PREFIX + "pending-conversations:set";
 
     private CsRedisKeys() {}
 }

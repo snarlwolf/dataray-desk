@@ -1,0 +1,117 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "mybatis/mybatis-3-mapper.dtd">
+<mapper namespace="com.skydawn.desk.core.mapper.MessageMapper">
+
+    <resultMap id="BaseResultMap" type="com.skydawn.desk.core.entity.Message">
+        <id property="id" column="id"/>
+        <result property="conversationId" column="conversation_id"/>
+        <result property="messageSource" column="message_source"/>
+        <result property="officialPhoneNumber" column="official_phone_number"/>
+        <result property="officialAccount" column="official_account"/>
+        <result property="sourceMessageId" column="source_message_id"/>
+        <result property="messageType" column="message_type"/>
+        <result property="messageStatus" column="message_status"/>
+        <result property="sendTime" column="send_time"/>
+        <result property="redisConversationId" column="redis_conversation_id"/>
+        <result property="clientId" column="client_id"/>
+        <result property="clientName" column="client_name"/>
+        <result property="messageLanguage" column="message_language"/>
+        <result property="textBody" column="text_body"/>
+        <result property="mediaId" column="media_id"/>
+        <result property="mediaUrl" column="media_url"/>
+        <result property="mediaMimeType" column="media_mime_type"/>
+        <result property="mediaSha256" column="media_sha256"/>
+        <result property="mediaCaption" column="media_caption"/>
+        <result property="referencedMessageId" column="referenced_message_id"/>
+        <result property="reactionEmoji" column="reaction_emoji"/>
+        <result property="latitude" column="latitude"/>
+        <result property="longitude" column="longitude"/>
+        <result property="isStaff" column="is_staff"/>
+        <result property="sysUserId" column="sys_user_id"/>
+        <result property="delFlag" column="del_flag"/>
+        <result property="remarks" column="remarks"/>
+        <result property="createTime" column="create_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="updateBy" column="update_by"/>
+    </resultMap>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM message WHERE id = #{id}
+    </select>
+
+    <select id="findByConversationId" resultMap="BaseResultMap">
+        SELECT * FROM message WHERE conversation_id = #{conversationId} AND (del_flag IS NULL OR del_flag != '1') ORDER BY send_time ASC
+    </select>
+
+    <select id="findByRedisConversationId" resultMap="BaseResultMap">
+        SELECT * FROM message WHERE redis_conversation_id = #{redisConversationId} AND (del_flag IS NULL OR del_flag != '1') ORDER BY send_time ASC
+    </select>
+
+    <select id="countByRedisConvIdAndSourceMessageIdAndTypeAndStatus" resultType="int">
+        SELECT COUNT(*) FROM message
+        WHERE redis_conversation_id = #{redisConversationId}
+          AND source_message_id = #{sourceMessageId}
+          AND message_type = #{messageType}
+          AND message_status = #{messageStatus}
+          AND (del_flag IS NULL OR del_flag != '1')
+    </select>
+
+    <insert id="insert">
+        <bind name="msgSource" value="messageSource != null ? messageSource : 'unknown'"/>
+        <bind name="officialPhone" value="officialPhoneNumber != null ? officialPhoneNumber : 'unknown'"/>
+        <bind name="officialAcc" value="officialAccount != null ? officialAccount : 'unknown'"/>
+        <bind name="srcMsgId" value="sourceMessageId != null ? sourceMessageId : 'unknown'"/>
+        <bind name="msgType" value="messageType != null ? messageType : 'UNKNOWN'"/>
+        <bind name="msgStatus" value="messageStatus != null ? messageStatus : 'NORMAL'"/>
+        <bind name="redisConvId" value="redisConversationId != null ? redisConversationId : 'unknown'"/>
+        <bind name="isStaffVal" value="isStaff != null ? isStaff : 0"/>
+        INSERT INTO message
+        (id, conversation_id, message_source, official_phone_number, official_account, source_message_id,
+         message_type, message_status, send_time, redis_conversation_id, client_id, client_name, message_language,
+         text_body, media_id, media_url, media_mime_type, media_sha256, media_caption,
+         referenced_message_id, reaction_emoji, latitude, longitude, is_staff, sys_user_id, del_flag, remarks)
+        VALUES
+        (#{id}, #{conversationId}, #{msgSource}, #{officialPhone}, #{officialAcc}, #{srcMsgId},
+         #{msgType}, #{msgStatus}, #{sendTime}, #{redisConvId}, #{clientId}, #{clientName}, #{messageLanguage},
+         #{textBody}, #{mediaId}, #{mediaUrl}, #{mediaMimeType}, #{mediaSha256}, #{mediaCaption},
+         #{referencedMessageId}, #{reactionEmoji}, #{latitude}, #{longitude}, #{isStaffVal}, #{sysUserId}, '0', #{remarks})
+    </insert>
+
+    <update id="update">
+        UPDATE message SET
+            conversation_id = #{conversationId},
+            message_source = #{messageSource},
+            official_phone_number = #{officialPhoneNumber},
+            official_account = #{officialAccount},
+            source_message_id = #{sourceMessageId},
+            message_type = #{messageType},
+            message_status = #{messageStatus},
+            send_time = #{sendTime},
+            redis_conversation_id = #{redisConversationId},
+            client_id = #{clientId},
+            client_name = #{clientName},
+            message_language = #{messageLanguage},
+            text_body = #{textBody},
+            media_id = #{mediaId},
+            media_url = #{mediaUrl},
+            media_mime_type = #{mediaMimeType},
+            media_sha256 = #{mediaSha256},
+            media_caption = #{mediaCaption},
+            referenced_message_id = #{referencedMessageId},
+            reaction_emoji = #{reactionEmoji},
+            latitude = #{latitude},
+            longitude = #{longitude},
+            is_staff = #{isStaff},
+            sys_user_id = #{sysUserId},
+            del_flag = #{delFlag},
+            remarks = #{remarks},
+            update_time = CURRENT_TIMESTAMP,
+            update_by = #{updateBy}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM message WHERE id = #{id}
+    </delete>
+</mapper>

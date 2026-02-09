@@ -1,0 +1,68 @@
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "mybatis/mybatis-3-mapper.dtd">
+<mapper namespace="com.skydawn.desk.core.mapper.ConversationMapper">
+
+    <resultMap id="BaseResultMap" type="com.skydawn.desk.core.entity.Conversation">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="accountNo" column="account_no"/>
+        <result property="channel" column="channel"/>
+        <result property="status" column="status"/>
+        <result property="requestTime" column="request_time"/>
+        <result property="closeTime" column="close_time"/>
+        <result property="priority" column="priority"/>
+        <result property="agentId" column="agent_id"/>
+        <result property="agentName" column="agent_name"/>
+        <result property="isTransferAgent" column="is_transfer_agent"/>
+        <result property="currentReplyStatus" column="current_reply_status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="delFlag" column="del_flag"/>
+        <result property="remarks" column="remarks"/>
+    </resultMap>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM conversation WHERE id = #{id}
+    </select>
+
+    <select id="findByUserId" resultMap="BaseResultMap">
+        SELECT * FROM conversation WHERE user_id = #{userId} AND (del_flag IS NULL OR del_flag != '1') ORDER BY request_time DESC
+    </select>
+
+    <insert id="insert">
+        INSERT INTO conversation
+        (id, user_id, account_no, channel, status, request_time, close_time, priority,
+         agent_id, agent_name, is_transfer_agent, current_reply_status,
+         create_time, create_by, update_time, update_by, del_flag, remarks)
+        VALUES
+        (#{id}, #{userId}, #{accountNo}, #{channel}, #{status}, #{requestTime}, #{closeTime}, #{priority},
+         #{agentId}, #{agentName}, #{isTransferAgent}, #{currentReplyStatus},
+         #{createTime}, #{createBy}, #{updateTime}, #{updateBy}, #{delFlag}, #{remarks})
+    </insert>
+
+    <update id="update">
+        UPDATE conversation SET
+            user_id = #{userId},
+            account_no = #{accountNo},
+            channel = #{channel},
+            status = #{status},
+            request_time = #{requestTime},
+            close_time = #{closeTime},
+            priority = #{priority},
+            agent_id = #{agentId},
+            agent_name = #{agentName},
+            is_transfer_agent = #{isTransferAgent},
+            current_reply_status = #{currentReplyStatus},
+            update_time = #{updateTime},
+            update_by = #{updateBy},
+            del_flag = #{delFlag},
+            remarks = #{remarks}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM conversation WHERE id = #{id}
+    </delete>
+</mapper>

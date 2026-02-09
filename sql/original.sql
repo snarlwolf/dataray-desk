@@ -18,4 +18,6 @@ VALUES
 ('skydawn_desk','message','enable','STATUS','1','是否接收状态消息，0否，1是'),
 ('skydawn_desk','message','enable','REACTION','1','是否接收回复消息，0否，1是'),
 ('skydawn_desk','message','enable','UNSUPPORTED','1','是否接收不支持消息，0否，1是'),
-('skydawn_desk','message','enable','UNKNOWN','1','是否接收未知消息，0否，1是');
+('skydawn_desk','message','enable','UNKNOWN','1','是否接收未知消息，0否，1是'),
+('skydawn_desk','desk','conversation','max-count','20','客服的最大会话数量'),
+('skydawn_desk','desk','unline','keep-conversation','600','客服会话保存最大掉线时间（秒）');

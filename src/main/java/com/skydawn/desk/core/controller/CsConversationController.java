@@ -100,7 +100,7 @@ public class CsConversationController {
     /**
      * 当前用户的会话列表（刷新/重新登录后从 Redis user-conversation 拉取）
      * GET /desk/conversation/list
-     * 返回 conversationIds 及简要信息：id 为会话 id（格式 phoneNumberId-fromId），fromId 为解析出的客户手机号。
+     * 返回 conversationIds 及简要信息：id 为会话 id，clientId 为解析出的客户标识。
      */
     @GetMapping("/conversation/list")
     public ResponseEntity<Map<String, Object>> getConversationList(HttpServletRequest request) {
@@ -114,8 +114,8 @@ public class CsConversationController {
         Set<String> ids = redisFinder.getUserConversationList(user.getUserName());
         List<Map<String, String>> conversations = ids.stream()
                 .map(id -> {
-                    String fromId = CsRedisKeys.parseFromIdFromConversationId(id);
-                    return Map.<String, String>of("id", id, "fromId", fromId != null ? fromId : id);
+                    String clientId = CsRedisKeys.parseFromIdFromConversationId(id);
+                    return Map.<String, String>of("id", id, "clientId", clientId != null ? clientId : id);
                 })
                 .collect(Collectors.toList());
         result.put("success", true);

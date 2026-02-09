@@ -4,7 +4,7 @@ import com.skydawn.desk.dto.GeneralMessageDto;
 import com.skydawn.ingest.dto.WabaMessageDto;
 
 /**
- * WabaMessageDto 转 GeneralMessageDto：messageSource="waba"，fromId=fromWaId。
+ * WabaMessageDto 转 GeneralMessageDto：messageSource="waba"，clientId 来自 fromWaId 或状态消息的 recipientId。
  */
 public final class WabaToGeneralMessageConverter {
 
@@ -13,30 +13,30 @@ public final class WabaToGeneralMessageConverter {
     public static GeneralMessageDto fromWaba(WabaMessageDto w) {
         GeneralMessageDto g = new GeneralMessageDto();
         g.setMessageSource("waba");
-        // 状态消息（SENT/DELIVERED/READ）用 recipientId 作为会话归属，便于按会话路由
+        // 状态消息（SENT/DELIVERED/READ）用渠道侧 recipientId 作为会话归属，便于按会话路由
         if (w.getMessageType() == WabaMessageDto.MessageType.STATUS && w.getRecipientId() != null) {
-            g.setFromId(w.getRecipientId());
+            g.setClientId(w.getRecipientId());
         } else {
-            g.setFromId(w.getFromWaId());
+            g.setClientId(w.getFromWaId());
         }
         g.setAccountId(w.getAccountId());
-        g.setDisplayPhoneNumber(w.getDisplayPhoneNumber());
-        g.setPhoneNumberId(w.getPhoneNumberId());
-        g.setMessageId(w.getMessageId());
+        g.setOfficialPhoneNumber(w.getDisplayPhoneNumber());
+        g.setOfficialAccount(w.getPhoneNumberId());
+        g.setSourceMessageId(w.getMessageId());
         g.setMessageType(mapType(w.getMessageType()));
         g.setMessageStatus(mapStatus(w.getMessageStatus()));
         g.setTimestamp(w.getTimestamp());
-        g.setFromProfileName(w.getFromProfileName());
-        g.setRecipientId(w.getRecipientId());
+        g.setClientName(w.getFromProfileName());
         g.setTextBody(w.getTextBody());
         g.setMediaId(w.getMediaId());
         g.setMediaUrl(w.getMediaUrl());
         g.setMediaMimeType(w.getMediaMimeType());
         g.setMediaSha256(w.getMediaSha256());
         g.setMediaCaption(w.getMediaCaption());
-        g.setReactionMessageId(w.getReactionMessageId());
+        String refId = w.getReactionMessageId() != null && !w.getReactionMessageId().isBlank()
+                ? w.getReactionMessageId() : w.getQuotedMessageId();
+        if (refId != null) g.setReferencedMessageId(refId);
         g.setReactionEmoji(w.getReactionEmoji());
-        g.setQuotedMessageId(w.getQuotedMessageId());
         g.setLatitude(w.getLatitude());
         g.setLongitude(w.getLongitude());
         return g;

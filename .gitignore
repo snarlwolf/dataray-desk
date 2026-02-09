@@ -4,9 +4,11 @@ target/
 
 docs/
 logs/
+plans/
 prompt/
 report/
 reports/
+test-docs/
 
 # IDE
 .idea/
@@ -23,4 +25,5 @@ Thumbs.db
 # Env / secrets
 .env
 
-
+.classpath
+.settings/

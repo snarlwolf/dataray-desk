@@ -89,6 +89,33 @@ public class RedisFinder {
         return size != null ? size.intValue() : 0;
     }
 
+    /** 从负载 ZSET 取该客服当前负载（会话数），不在 ZSET 或未设置时视为 0 */
+    public int getLoadScore(String userId) {
+        if (userId == null || userId.isBlank()) return 0;
+        Double score = redis.opsForZSet().score(CsRedisKeys.LOAD_ZSET, userId);
+        return score != null ? score.intValue() : 0;
+    }
+
+    /**
+     * 分配用候选客服：在线且负载 &lt; maxCount，按负载升序、登录时间升序（先登录优先）。
+     * 用于在 Lua 分配前选出一名候选；若原子分配失败可顺延下一位。
+     */
+    public List<String> getOrderedCandidateUserIdsForAssignment(int maxCount) {
+        List<String> online = getAllOnlineUserIds();
+        if (online.isEmpty()) return List.of();
+        List<LoadAndLogin> list = new ArrayList<>();
+        for (String uid : online) {
+            int load = getLoadScore(uid);
+            if (load >= maxCount) continue;
+            String loginTime = getLoginTime(uid);
+            list.add(new LoadAndLogin(uid, load, loginTime != null ? loginTime : ""));
+        }
+        list.sort(Comparator.comparingInt(LoadAndLogin::load).thenComparing(LoadAndLogin::loginTime));
+        return list.stream().map(LoadAndLogin::userId).collect(java.util.stream.Collectors.toList());
+    }
+
+    private record LoadAndLogin(String userId, int load, String loginTime) {}
+
     public String getUserOfflineSince(String userId) {
         if (userId == null || userId.isBlank()) return null;
         String key = CsRedisKeys.userOfflineSince(Objects.requireNonNull(userId));
@@ -130,35 +157,6 @@ public class RedisFinder {
     }
 
     public record OnlineUserSlot(String userId, int conversationCount, String loginTime) {}
-
-    public long messageQueueLength(String fromId) {
-        if (fromId == null || fromId.isBlank()) return 0;
-        String key = CsRedisKeys.messageQueue(Objects.requireNonNull(fromId));
-        Long len = redis.opsForList().size(Objects.requireNonNull(key));
-        return len != null ? len : 0;
-    }
-
-    public String messageQueueLpop(String fromId) {
-        if (fromId == null || fromId.isBlank()) return null;
-        String key = CsRedisKeys.messageQueue(Objects.requireNonNull(fromId));
-        return redis.opsForList().leftPop(Objects.requireNonNull(key));
-    }
-
-    /** 有待处理消息的 fromId 列表（keys 或 SET） */
-    public Set<String> getMessageQueueFromIds() {
-        Set<String> fromIds = redis.opsForSet().members(CsRedisKeys.MESSAGE_QUEUE_FROMIDS);
-        if (fromIds != null && !fromIds.isEmpty()) return fromIds;
-        Set<String> keys = redis.keys(CsRedisKeys.MESSAGE_QUEUE + "*");
-        if (keys == null || keys.isEmpty()) return Set.of();
-        Set<String> ids = new HashSet<>();
-        for (String key : keys) {
-            if (key.startsWith(CsRedisKeys.MESSAGE_QUEUE)) {
-                String segment = key.substring(CsRedisKeys.MESSAGE_QUEUE.length());
-                ids.add(StringTools.unescapeForRedisKeySegment(segment));
-            }
-        }
-        return ids;
-    }
 
     /** 有 user-conversation 且不在 users 中的客服登录名（用于自动转移、清理） */
     public List<String> getOfflineUserIdsWithConversations() {

@@ -781,6 +781,10 @@ body {
 .chat-msg-ticks .tick-second {
     margin-left: -0.5em;
 }
+/* 已读：双勾颜色与 WA 类似 */
+.chat-msg-ticks.chat-msg-ticks-read .tick {
+    color: #55EEEE;
+}
 /* 非本人发送的我方消息：下方时间和勾勾为 #DDDDDD */
 .chat-message-row.is-staff.is-other-staff .chat-message-meta,
 .chat-message-row.is-staff.is-other-staff .chat-message-time,

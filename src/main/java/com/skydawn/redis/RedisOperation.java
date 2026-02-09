@@ -1,21 +1,21 @@
 package com.skydawn.redis;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
- * 客服台 Redis 写入/更新/删除（desk:cs）
- * TTL：user-offline-since 24h（自动过期，不堆积），锁 30s，message-queue 7d（可选）。
- * 登录/下线事件若需长期审计，可另行写入数据库日志。
+ * 客服台 Redis 写入/更新/删除（desk:cs / desk:uq）
+ * TTL：仅 user-offline-since 24h、锁 30s。会话相关 key 不设 TTL，由客服手动结束会话时统一删除。
  */
 public class RedisOperation {
 
-    /** user-offline-since 键 TTL（小时），过期自动删除，避免 Redis 数据无限增长 */
+    /** user-offline-since 键 TTL（小时） */
     public static final int TTL_USER_OFFLINE_HOURS = 24;
     public static final int TTL_LOCK_SECONDS = 30;
-    public static final int TTL_MESSAGE_QUEUE_DAYS = 7;
 
     private final StringRedisTemplate redis;
 
@@ -106,6 +106,25 @@ public class RedisOperation {
         redis.delete(Objects.requireNonNull(key));
     }
 
+    /** Redis 会话 id -> 库表 conversation.id，供消息入库时解析 conversation_id（不存 conversation 表，仅缓存） */
+    public Long getConversationDbId(String redisConversationId) {
+        if (redisConversationId == null || redisConversationId.isBlank()) return null;
+        String key = CsRedisKeys.conversationDbId(redisConversationId);
+        String val = redis.opsForValue().get(key);
+        if (val == null || val.isBlank()) return null;
+        try {
+            return Long.parseLong(val.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    public void setConversationDbId(String redisConversationId, Long conversationDbId) {
+        if (redisConversationId == null || redisConversationId.isBlank() || conversationDbId == null) return;
+        String key = CsRedisKeys.conversationDbId(redisConversationId);
+        redis.opsForValue().set(key, String.valueOf(conversationDbId));
+    }
+
     public void deleteConversationPhone(String conversationId) {
         if (conversationId == null || conversationId.isBlank()) return;
         String key = CsRedisKeys.conversationPhone(Objects.requireNonNull(conversationId));
@@ -115,12 +134,12 @@ public class RedisOperation {
     /** 单会话消息列表最大条数，超出时保留最近一段 */
     public static final int CONVERSATION_MESSAGES_MAX = 1000;
 
-    /** 将会话消息 JSON 追加到 LIST，并 LTRIM 保留最近 {@value #CONVERSATION_MESSAGES_MAX} 条 */
+    /** 将会话消息 JSON 追加到 LIST，LTRIM 保留最近 {@value #CONVERSATION_MESSAGES_MAX} 条；会话由客服手动结束时删除。 */
     public void appendConversationMessage(String conversationId, String messageJson) {
         if (conversationId == null || conversationId.isBlank() || messageJson == null) return;
         String key = CsRedisKeys.conversationMessages(Objects.requireNonNull(conversationId));
         redis.opsForList().rightPush(Objects.requireNonNull(key), Objects.requireNonNull(messageJson));
-        redis.opsForList().trim(Objects.requireNonNull(key), -CONVERSATION_MESSAGES_MAX, -1);
+        redis.opsForList().trim(key, -CONVERSATION_MESSAGES_MAX, -1);
     }
 
     /** 结束会话时删除会话消息列表 */
@@ -128,18 +147,6 @@ public class RedisOperation {
         if (conversationId == null || conversationId.isBlank()) return;
         String key = CsRedisKeys.conversationMessages(Objects.requireNonNull(conversationId));
         redis.delete(Objects.requireNonNull(key));
-    }
-
-    public void messageQueueRpush(String fromId, String json) {
-        if (fromId == null || fromId.isBlank() || json == null) return;
-        String key = CsRedisKeys.messageQueue(Objects.requireNonNull(fromId));
-        redis.opsForList().rightPush(Objects.requireNonNull(key), Objects.requireNonNull(json));
-        redis.opsForSet().add(CsRedisKeys.MESSAGE_QUEUE_FROMIDS, Objects.requireNonNull(fromId));
-    }
-
-    public void messageQueueSremFromIds(String fromId) {
-        if (fromId == null || fromId.isBlank()) return;
-        redis.opsForSet().remove(CsRedisKeys.MESSAGE_QUEUE_FROMIDS, Objects.requireNonNull(fromId));
     }
 
     /** 分布式锁：SET key value NX EX 30，成功返回 true */
@@ -153,16 +160,79 @@ public class RedisOperation {
         redis.delete(Objects.requireNonNull(lockKey));
     }
 
-    /** 结束会话：删除 user-conversation 成员、conversation-user、conversation-type、conversation-phone、conversation-messages（会话 id 即 fromId） */
+    /** 结束会话：删除 user-conversation 成员、conversation-user、type、phone、messages，并负载 ZSET -1 */
     public void endSessionAtomic(String fromId, String userId, String conversationId) {
         if (fromId == null || userId == null || conversationId == null) return;
         String userConvKey = CsRedisKeys.userConversation(Objects.requireNonNull(userId));
         String convUserKey = CsRedisKeys.conversationUser(Objects.requireNonNull(conversationId));
-        redis.opsForSet().remove(Objects.requireNonNull(userConvKey), Objects.requireNonNull(conversationId));
-        redis.delete(Objects.requireNonNull(convUserKey));
+        redis.opsForSet().remove(userConvKey, conversationId);
+        redis.delete(convUserKey);
         deleteConversationType(conversationId);
         deleteConversationPhone(conversationId);
         deleteConversationMessages(conversationId);
+        decrLoadZset(userId);
+    }
+
+    // ---------- 负载 ZSET（desk:cs:load:zset），用于选负载最小的客服 ----------
+    /** 将客服加入负载 ZSET 或设置其当前负载（登录时用，score = 当前会话数） */
+    public void setLoadZsetScore(String userId, int conversationCount) {
+        if (userId == null || userId.isBlank()) return;
+        redis.opsForZSet().add(CsRedisKeys.LOAD_ZSET, userId, conversationCount);
+    }
+
+    /** 负载 -1（结束会话或转移时从原客服移除） */
+    public void decrLoadZset(String userId) {
+        if (userId == null || userId.isBlank()) return;
+        redis.opsForZSet().incrementScore(CsRedisKeys.LOAD_ZSET, userId, -1);
+    }
+
+    /** 负载 +1（仅转移时给目标客服加，分配时由 Lua 脚本统一加） */
+    public void incrLoadZset(String userId) {
+        if (userId == null || userId.isBlank()) return;
+        redis.opsForZSet().incrementScore(CsRedisKeys.LOAD_ZSET, userId, 1);
+    }
+
+    /**
+     * 原子将会话分配给指定客服（负载 &lt; maxCount 时执行 SADD、SET、ZINCRBY；会话 key 由结束会话时删除，不设 TTL）。
+     * @return true 分配成功，false 该客服已达上限未分配
+     */
+    public boolean assignConversationToAgent(String userId, String conversationId, int maxCount) {
+        if (userId == null || conversationId == null || maxCount <= 0) return false;
+        String loadZset = CsRedisKeys.LOAD_ZSET;
+        String userConvKey = CsRedisKeys.userConversation(userId);
+        String convUserKey = CsRedisKeys.conversationUser(conversationId);
+        Long result = redis.execute(
+                CsRedisScripts.assignConversationToAgent(),
+                List.of(loadZset, userConvKey, convUserKey),
+                userId, conversationId, String.valueOf(maxCount));
+        return result != null && result == 1L;
+    }
+
+    /** 将会话 id 加入待分配队列队尾（去重），返回是否新加入 */
+    public boolean pendingConversationsAdd(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) return false;
+        Long added = redis.execute(CsRedisScripts.pendingAdd(),
+                List.of(CsRedisKeys.PENDING_CONVERSATIONS_SET, CsRedisKeys.PENDING_CONVERSATIONS_LIST),
+                conversationId);
+        return added != null && added == 1L;
+    }
+
+    /** 将会话 id 加入待分配队列队首（优先出队，用于离线转移无目标时），去重，返回是否新加入 */
+    public boolean pendingConversationsAddPriority(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) return false;
+        Long added = redis.execute(CsRedisScripts.pendingAddPriority(),
+                List.of(CsRedisKeys.PENDING_CONVERSATIONS_SET, CsRedisKeys.PENDING_CONVERSATIONS_LIST),
+                conversationId);
+        return added != null && added == 1L;
+    }
+
+    /** 从待分配队列 FIFO 弹出最多 count 条，每次最多建议 5 条避免独占 */
+    public List<String> pendingConversationsPopMulti(int count) {
+        if (count <= 0) return List.of();
+        List<String> list = redis.execute(CsRedisScripts.pendingPopMulti(),
+                List.of(CsRedisKeys.PENDING_CONVERSATIONS_LIST, CsRedisKeys.PENDING_CONVERSATIONS_SET),
+                String.valueOf(count));
+        return list != null ? list : Collections.emptyList();
     }
 
     /** 发布消息到指定频道（用于多实例挤掉旧 WebSocket） */
