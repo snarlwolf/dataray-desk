@@ -50,8 +50,16 @@ public class CsAllocationService {
     private static final String UNSUPPORTED_UNKNOWN_AUTO_REPLY =
             "⚠️[System Message] Sorry, we couldn't process your message due to an unknown reason.";
 
-    private static final String END_SESSION_SYSTEM_MESSAGE =
-            "⚠️[System Message] This session has ended.";
+    /**
+     * 结束会话时发给客户的英文系统提示；{@code conversationDbId} 为 conversation 表主键（可先由 Redis desk:cs:conversation-db-id 读取）。
+     */
+    private static String buildEndSessionCustomerMessage(Long conversationDbId) {
+        if (conversationDbId != null) {
+            return "⚠️[System Message] This conversation has ended. The conversation ID is "
+                    + conversationDbId + ".";
+        }
+        return "⚠️[System Message] This conversation has ended.";
+    }
 
     /** 未分配人工时的会话归属标识，新消息到达时若为此类则重新分配人工（规则同新会话） */
     private static final Set<String> NON_HUMAN_USER_IDS = Set.of("AISYSTEM", "TRANSFERING");
@@ -67,6 +75,12 @@ public class CsAllocationService {
             if ("waba".equalsIgnoreCase(dto.getMessageSource()) && dto.getOfficialAccount() != null && !dto.getOfficialAccount().isBlank()) {
                 redisOperation.setConversationPhone(conversationId, dto.getOfficialAccount());
             }
+        }
+        String sid = dto.getSourceMessageId();
+        if (sid != null && !sid.isBlank() && redisFinder.conversationMessagesContainSourceMessageId(conversationId, sid)) {
+            log.debug("ensureConversationAndAppendMessage: skip duplicate redis append, sourceMessageId={} conversationId={}",
+                    sid, conversationId);
+            return;
         }
         String json = GSON.toJson(dto);
         redisOperation.appendConversationMessage(conversationId, json);
@@ -399,7 +413,6 @@ public class CsAllocationService {
         replyDto.setMessageStatus(GeneralMessageDto.MessageStatus.SENT);
         replyDto.setIsStaff(true);
         replyDto.setIsSystemReply(true);
-        replyDto.setCsStaffName(userId);
         replyDto.setReferencedMessageId(incomingDto.getSourceMessageId());
         replyDto.setMessageSource("waba");
         replyDto.setOfficialAccount(officialAccount);
@@ -434,12 +447,16 @@ public class CsAllocationService {
         }
         String type = redisFinder.getConversationType(conversationId);
         String phoneNumberId = redisFinder.getConversationPhone(conversationId);
-        // 在 endSessionAtomic 清除 Redis 之前先读取 DB 会话 ID，用于结束后更新 conversation 表状态
+        // 在 endSessionAtomic 清除 Redis 之前先读取 DB 会话 ID（Redis conversation-db-id），用于文案与更新 conversation 表
         Long convDbId = redisOperation.getConversationDbId(conversationId);
         String warning = null;
         try {
             if ("waba".equalsIgnoreCase(type) && phoneNumberId != null && !phoneNumberId.isBlank()) {
-                WabaSenderDto dto = new WabaSenderDto(fromId, END_SESSION_SYSTEM_MESSAGE, phoneNumberId);
+                if (convDbId == null) {
+                    convDbId = conversationService.getOrCreateByRedisConversationId(conversationId, phoneNumberId, "waba");
+                }
+                String endCustomerText = buildEndSessionCustomerMessage(convDbId);
+                WabaSenderDto dto = new WabaSenderDto(fromId, endCustomerText, phoneNumberId);
                 WabaMessageDto sent = wabaMessageSender.sendWabaTextMessage(dto);
                 if (sent != null) {
                     log.info("endSession: sent system message to customer fromId={}", fromId);
@@ -447,23 +464,28 @@ public class CsAllocationService {
                     GeneralMessageDto endDto = new GeneralMessageDto();
                     endDto.setConversationId(conversationId);
                     endDto.setClientId(fromId);
-                    endDto.setTextBody(END_SESSION_SYSTEM_MESSAGE);
+                    endDto.setTextBody(endCustomerText);
                     endDto.setSourceMessageId(sent.getMessageId());
                     endDto.setTimestamp(System.currentTimeMillis() / 1000);
                     endDto.setMessageType(GeneralMessageDto.MessageType.TEXT);
                     endDto.setMessageStatus(GeneralMessageDto.MessageStatus.SENT);
                     endDto.setIsStaff(true);
+                    endDto.setIsSystemReply(true);
                     endDto.setMessageSource("waba");
                     endDto.setOfficialAccount(phoneNumberId);
-                    Long convId = conversationService.getOrCreateByRedisConversationId(conversationId, phoneNumberId, "waba");
-                    convDbId = convId;
-                    if (convId != null) {
-                        Message msg = GeneralMessageToMessageConverter.toMessage(endDto, convId, null);
+                    if (convDbId != null) {
+                        Message msg = GeneralMessageToMessageConverter.toMessage(endDto, convDbId, null);
                         msg.setIsStaff(1);
                         msg.setSysUserId("AUTO");
                         messageMapper.insert(msg);
                     } else {
-                        log.warn("endSession: convId is null, skip message insert, conversationId={}", conversationId);
+                        log.warn("endSession: convDbId is null, skip message insert, conversationId={}", conversationId);
+                    }
+                    // 与「不支持」自动回复一致：会话清理前写入 Redis 并推给当前客服，便于列表与库一致
+                    String endJson = GSON.toJson(endDto);
+                    redisOperation.appendConversationMessage(conversationId, endJson);
+                    if (!sockets.sendToUser(userId, endJson)) {
+                        log.warn("endSession: push end message to agent failed userId={}", userId);
                     }
                 } else {
                     log.warn("endSession: WABA send failed, 24h window may have expired, fromId={}", fromId);
@@ -473,7 +495,7 @@ public class CsAllocationService {
         } catch (Exception e) {
             log.error("endSession: error during WABA send or DB write, conversationId={}", conversationId, e);
         }
-        // 若仍未拿到 DB ID（非 WABA 渠道或 try 块内异常），尝试从 Redis 再读一次
+        // 若仍未拿到 DB ID（非 WABA 渠道或 try 块内异常），在清理 Redis 前再读一次
         if (convDbId == null) {
             convDbId = redisOperation.getConversationDbId(conversationId);
         }

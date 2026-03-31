@@ -716,6 +716,16 @@ new Vue({
                 this.selectedClientName = null;
             }
         },
+        /** 非当前客服发送的坐席侧消息前缀：同事名或 AI（随页面语言） */
+        formatOtherStaffPrefix: function(msg) {
+            if (!msg || !msg.isStaff) return '';
+            if (msg.csStaffName && msg.csStaffName === this.username) return '';
+            var staff = msg.csStaffName != null ? String(msg.csStaffName).trim() : '';
+            if (staff) {
+                return this.t('staffReplyBadge').replace(/\{name\}/g, staff);
+            }
+            return this.t('aiReplyBadge');
+        },
         formatMessageTime: function(ts) {
             if (!ts) return '';
             var d = new Date(ts);

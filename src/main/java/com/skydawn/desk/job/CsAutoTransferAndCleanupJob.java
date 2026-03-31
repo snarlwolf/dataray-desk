@@ -2,6 +2,7 @@ package com.skydawn.desk.job;
 
 import com.skydawn.common.Defs;
 import com.skydawn.common.Vars;
+import com.skydawn.desk.service.CsColleagueNotifyService;
 import com.skydawn.redis.CsRedisKeys;
 import com.skydawn.redis.RedisFinder;
 import com.skydawn.redis.RedisOperation;
@@ -10,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,21 +26,27 @@ public class CsAutoTransferAndCleanupJob {
     private static final Logger log = LoggerFactory.getLogger(CsAutoTransferAndCleanupJob.class);
     /** 客服离线多少秒后自动转移其会话，默认 500 秒 */
     private static final int DEFAULT_OFFLINE_KEEP_CONVERSATION_SECONDS = 500;
+    private static final DateTimeFormatter LOGIN_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final RedisFinder redisFinder;
     private final RedisOperation redisOperation;
     private final com.skydawn.desk.service.CsAllocationService csAllocationService;
+    private final CsColleagueNotifyService colleagueNotifyService;
 
     public CsAutoTransferAndCleanupJob(RedisFinder redisFinder, RedisOperation redisOperation,
-                                       com.skydawn.desk.service.CsAllocationService csAllocationService) {
+                                       com.skydawn.desk.service.CsAllocationService csAllocationService,
+                                       CsColleagueNotifyService colleagueNotifyService) {
         this.redisFinder = redisFinder;
         this.redisOperation = redisOperation;
         this.csAllocationService = csAllocationService;
+        this.colleagueNotifyService = colleagueNotifyService;
     }
 
     /** 按固定间隔：下线超时自动转移（阈值：Vars desk.unline.keep-conversation 秒，默认 500） */
     @Scheduled(fixedDelayString = "${sys.timer.main-task-interval:40000}")
     public void autoTransferOfflineUsers() {
+        backfillOfflineSinceAndProfilesForPassiveDisconnects();
+
         int thresholdSeconds = getOfflineKeepConversationSeconds();
         List<String> offlineUserIds = redisFinder.getOfflineUserIdsWithConversations();
         long now = System.currentTimeMillis();
@@ -80,6 +89,26 @@ public class CsAutoTransferAndCleanupJob {
             } finally {
                 redisOperation.unlock(lockKey, outerLockVal);
             }
+        }
+    }
+
+    /**
+     * R1-A：无 users、有会话、无 user-offline-since 时补写，否则 {@link #autoTransferOfflineUsers} 会永久跳过；
+     * R3：同批清理幽灵 user-profile（见 docs/redis-online-heartbeat-design.md §9.1）。
+     */
+    private void backfillOfflineSinceAndProfilesForPassiveDisconnects() {
+        List<String> offlineUserIds = redisFinder.getOfflineUserIdsWithConversations();
+        String now = LocalDateTime.now().format(LOGIN_TIME);
+        for (String userId : offlineUserIds) {
+            if (redisFinder.isUserOnline(userId)) {
+                continue;
+            }
+            if (redisFinder.getUserOfflineSince(userId) != null) {
+                continue;
+            }
+            redisOperation.setUserOfflineSince(userId, now);
+            colleagueNotifyService.cleanupProfileAfterPassiveOffline(userId);
+            log.info("backfill user-offline-since for passive offline userId={}", userId);
         }
     }
 

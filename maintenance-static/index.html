@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>系统维护中</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { min-height: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            color: #1e3a5f;
+            overflow-x: hidden;
+            position: relative;
+        }
+        /* 与客服台一致的蓝系配色，背景轻微流动 */
+        .bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background: linear-gradient(160deg, #dbeafe 0%, #bfdbfe 40%, #93c5fd 100%);
+            background-size: 200% 200%;
+            animation: bgShift 14s ease-in-out infinite;
+        }
+        @keyframes bgShift {
+            0%, 100% { background-position: 0% 40%; }
+            50% { background-position: 100% 60%; }
+        }
+        /* 曲线色块层：波浪形分隔不同色相 */
+        .curve-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .curve-layer svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .curve-shift {
+            animation: curveDrift 22s ease-in-out infinite;
+        }
+        .curve-shift--2 {
+            animation: curveDrift2 26s ease-in-out infinite;
+        }
+        .curve-layer--accent {
+            opacity: 0.88;
+            mix-blend-mode: multiply;
+        }
+        @keyframes curveDrift {
+            0%, 100% { transform: translateX(0) translateY(0); }
+            50% { transform: translateX(-2%) translateY(1.5%); }
+        }
+        @keyframes curveDrift2 {
+            0%, 100% { transform: translateX(0) translateY(0); }
+            50% { transform: translateX(1.5%) translateY(-1%); }
+        }
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(48px);
+            opacity: 0.55;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .orb-a {
+            width: min(55vw, 380px);
+            height: min(55vw, 380px);
+            background: #5dade2;
+            top: -12%;
+            right: -8%;
+            animation: drift 18s ease-in-out infinite;
+        }
+        .orb-b {
+            width: min(45vw, 300px);
+            height: min(45vw, 300px);
+            background: #85c1e9;
+            bottom: -5%;
+            left: -10%;
+            animation: drift 22s ease-in-out infinite reverse;
+        }
+        @keyframes drift {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(20px, -16px) scale(1.05); }
+        }
+        .wrap {
+            position: relative;
+            z-index: 2;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 20px 48px;
+            text-align: center;
+        }
+        .brand {
+            margin-bottom: 28px;
+            max-width: 22rem;
+        }
+        .brand-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .logo {
+            height: 44px;
+            width: auto;
+            display: block;
+            filter: drop-shadow(0 4px 12px rgba(30, 106, 154, 0.2));
+        }
+        .brand-name {
+            font-size: clamp(1.35rem, 4vw, 1.65rem);
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: #1565a8;
+            line-height: 1.2;
+        }
+        .brand-tagline {
+            margin-top: 10px;
+            font-size: clamp(0.82rem, 2.4vw, 0.92rem);
+            line-height: 1.5;
+            color: rgba(30, 58, 95, 0.72);
+            font-weight: 500;
+            font-style: italic;
+        }
+        .mascot {
+            margin-bottom: 28px;
+            animation: bounce 2.4s ease-in-out infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .mascot svg {
+            width: min(120px, 36vw);
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        .lead {
+            font-size: clamp(1.5rem, 5vw, 1.95rem);
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            line-height: 1.35;
+            margin-bottom: 0.65em;
+            background: linear-gradient(105deg, #1565a8 0%, #2980b9 45%, #42a5d9 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: none;
+        }
+        .lines {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85em;
+            max-width: 26em;
+            margin: 0 auto;
+        }
+        .lines p {
+            font-size: clamp(0.95rem, 3.2vw, 1.05rem);
+            line-height: 1.55;
+            color: rgba(30, 58, 95, 0.88);
+            font-weight: 500;
+        }
+        .dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 2rem;
+        }
+        .dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2980b9;
+            opacity: 0.45;
+            animation: dotPulse 1.2s ease-in-out infinite;
+        }
+        .dots span:nth-child(2) { animation-delay: 0.2s; }
+        .dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes dotPulse {
+            0%, 100% { opacity: 0.35; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg" aria-hidden="true"></div>
+    <div class="curve-layer curve-shift" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="none">
+            <defs>
+                <linearGradient id="cv1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.95"/>
+                    <stop offset="100%" stop-color="#bae6fd" stop-opacity="0.75"/>
+                </linearGradient>
+                <linearGradient id="cv2" x1="100%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.45"/>
+                    <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.2"/>
+                </linearGradient>
+                <linearGradient id="cv3" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.18"/>
+                    <stop offset="100%" stop-color="#0284c7" stop-opacity="0.12"/>
+                </linearGradient>
+            </defs>
+            <!-- 左上 → 右下 大弧面 -->
+            <path fill="url(#cv1)" d="M0,0 L1440,0 L1440,380 C1200,420 1000,280 720,320 C440,360 200,180 0,260 Z"/>
+            <!-- 中腰波浪带 -->
+            <path fill="url(#cv2)" d="M0,300 C280,260 520,400 780,340 C1040,280 1240,380 1440,320 L1440,560 C1280,620 1040,500 800,560 C560,620 280,520 0,580 Z"/>
+            <!-- 底部隆起 -->
+            <path fill="url(#cv3)" d="M0,620 C360,560 680,720 1000,640 C1180,600 1320,660 1440,600 L1440,900 L0,900 Z"/>
+        </svg>
+    </div>
+    <div class="curve-layer curve-layer--accent curve-shift--2" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="none">
+            <path fill="#38bdf8" fill-opacity="0.14" d="M0,120 C240,200 480,80 720,140 C960,200 1200,100 1440,160 L1440,0 L0,0 Z"/>
+            <path fill="#0369a1" fill-opacity="0.08" d="M0,900 L0,680 C320,740 560,600 880,680 C1120,740 1320,660 1440,720 L1440,900 Z"/>
+        </svg>
+    </div>
+    <div class="orb orb-a" aria-hidden="true"></div>
+    <div class="orb orb-b" aria-hidden="true"></div>
+
+    <main class="wrap" role="main">
+        <header class="brand">
+            <div class="brand-row">
+                <img src="./logo.png" alt="" class="logo">
+                <span class="brand-name">Data Ray</span>
+            </div>
+            <p class="brand-tagline">We look forward to serving you better.</p>
+        </header>
+        <div class="mascot" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+                <circle cx="60" cy="60" r="52" fill="url(#g1)" opacity="0.95"/>
+                <defs>
+                    <linearGradient id="g1" x1="20" y1="15" x2="100" y2="105" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#ffffff"/>
+                        <stop offset="1" stop-color="#d4ecff"/>
+                    </linearGradient>
+                </defs>
+                <path d="M38 52h44v8H38z" fill="#2980b9"/>
+                <path d="M52 40v12h16V40l8 8v24H44V48l8-8z" fill="#1e6a9a"/>
+                <circle cx="44" cy="78" r="5" fill="#5dade2"/>
+                <circle cx="60" cy="78" r="5" fill="#5dade2"/>
+                <circle cx="76" cy="78" r="5" fill="#5dade2"/>
+                <path d="M85 28l6 6-4 4-6-6 4-4z" fill="#f39c12" opacity="0.95"/>
+                <path d="M92 22l4 4-2 2-4-4 2-2z" fill="#f1c40f"/>
+                <circle cx="28" cy="35" r="3" fill="#5dade2" opacity="0.8"/>
+                <circle cx="95" cy="42" r="2.5" fill="#5dade2" opacity="0.65"/>
+                <circle cx="22" cy="58" r="2" fill="#85c1e9" opacity="0.7"/>
+            </svg>
+        </div>
+        <p class="lead">系统正在维护</p>
+        <div class="lines">
+            <p>The system is under maintenance.</p>
+            <p>Sistem sedang dalam penyelenggaraan.</p>
+        </div>
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    </main>
+</body>
+</html>

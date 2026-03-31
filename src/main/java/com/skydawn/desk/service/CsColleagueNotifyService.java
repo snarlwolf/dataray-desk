@@ -81,6 +81,29 @@ public class CsColleagueNotifyService {
     }
 
     /**
+     * 被动离线（如 users TTL）补扫：无 WS 关闭回调时清理幽灵 profile，与 {@link #onUserOffline} 语义一致。
+     */
+    public void cleanupProfileAfterPassiveOffline(String userName) {
+        if (userName == null || userName.isBlank()) return;
+        if (redisFinder.isUserOnline(userName)) return;
+        String profileJson = redisFinder.getUserProfile(userName);
+        if (profileJson == null) return;
+        Long deptId = extractDeptIdFromProfileJson(profileJson);
+        onUserOffline(userName, deptId);
+    }
+
+    private static Long extractDeptIdFromProfileJson(String profileJson) {
+        try {
+            JsonObject obj = JsonParser.parseString(profileJson).getAsJsonObject();
+            if (obj.has("deptId") && !obj.get("deptId").isJsonNull()) {
+                return obj.get("deptId").getAsLong();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
      * 由 Redis Pub/Sub 监听器调用：向本实例上同部门所有已连接用户推送全量在线列表。
      * 每个实例各自执行，确保多实例下所有在线用户均能收到通知。
      *

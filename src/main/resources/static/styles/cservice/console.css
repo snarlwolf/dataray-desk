@@ -455,17 +455,19 @@ body {
     background: #0284c7;
     color: #fff;
 }
-/* 我方回复但无 loginId 或 loginId 非当前客服：灰色背景 */
+/* 我方回复但无 loginId 或 loginId 非当前客服：业务内容（他人 / AI 文本等），与本人回复同系不同色 */
 .chat-message-row.is-staff.is-other-staff .chat-message-bubble {
-    background: #888888;
+    background: #1c63a2;
     color: #fff;
 }
-/* 自动回复气泡：原 #0369a1 色相左移 15%（约 54°）→ hsl(146, 96%, 32%) */
+/* 系统自动回复（非业务提示）：保持独立色相，且优先于 is-other-staff，避免与业务消息同色 */
 .chat-message-row.is-staff.is-system-reply .chat-message-bubble {
     background: hsl(146, 96%, 32%);
+    color: #fff;
 }
 .chat-message-row.is-staff.is-system-reply.is-other-staff .chat-message-bubble {
-    background: #888888;
+    background: hsl(146, 96%, 32%);
+    color: #fff;
 }
 .chat-message-bubble-unsupported {
     background: #fef9c3 !important;
@@ -476,17 +478,36 @@ body {
     color: #854d0e;
 }
 .chat-message-row.is-staff.is-other-staff .chat-message-bubble-unsupported {
-    background: #888888 !important;
+    background: #1c63a2 !important;
     color: #fff;
 }
-/* 非本人发送的我方消息：前缀 [loginId回复] 或 [AI回复]，与回复内容同标签内，用 i 改色 */
+/* 系统回复的「不支持」提示仍用黄色底，与业务侧深底区分 */
+.chat-message-row.is-staff.is-system-reply .chat-message-bubble-unsupported {
+    background: #fef9c3 !important;
+    color: #854d0e;
+}
+/* 非本人发送的我方消息：Bootstrap info-circle（金色）+ 文案前缀 */
 .chat-message-other-staff-prefix {
     font-style: normal;
     font-size: 0.9em;
     color: #DDDDDD;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: middle;
+    margin-right: 2px;
+}
+.chat-message-prefix-icon {
+    color: #d4a017;
+    font-size: 1.05em;
+    flex-shrink: 0;
+    line-height: 1;
 }
 .chat-message-row.is-staff.is-other-staff .chat-message-other-staff-prefix {
     color: #DDDDDD;
+}
+.chat-message-row.is-staff.is-other-staff .chat-message-prefix-icon {
+    color: #e8c547;
 }
 .chat-message-sender {
     display: block;
@@ -1097,14 +1118,6 @@ body {
     }
 }
 
-/* ── 在线同事选项卡在线数 ── */
-.colleagues-online-count {
-    margin-left: 4px;
-    font-size: 11px;
-    color: #64748b;
-    font-weight: 400;
-}
-
 /* ── 在线同事列表专用样式 ── */
 .colleague-item .colleague-avatar-img {
     width: 40px;
@@ -1128,8 +1141,15 @@ body {
     flex-shrink: 0;
 }
 
-.colleague-item .colleague-name {
+.colleague-item-info {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.colleague-item .colleague-name {
     font-size: 14px;
     color: #334155;
     overflow: hidden;
@@ -1137,11 +1157,9 @@ body {
     white-space: nowrap;
 }
 
-.colleague-item .colleague-conv-count {
-    font-size: 12px;
-    color: #64748b;
-    background: #f1f5f9;
-    border-radius: 10px;
-    padding: 2px 8px;
-    flex-shrink: 0;
+.colleague-item .colleague-session-count {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 400;
+    line-height: 1.35;
 }

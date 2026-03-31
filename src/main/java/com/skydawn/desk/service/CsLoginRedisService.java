@@ -1,5 +1,6 @@
 package com.skydawn.desk.service;
 
+import com.skydawn.desk.config.DeskPresenceProperties;
 import com.skydawn.desk.sockets.CsMessageSendSockets;
 import com.skydawn.redis.CsRedisKeys;
 import com.skydawn.redis.RedisFinder;
@@ -24,19 +25,22 @@ public class CsLoginRedisService {
     private final RedisFinder redisFinder;
     private final CsAllocationService csAllocationService;
     private final CsMessageSendSockets sockets;
+    private final DeskPresenceProperties presenceProperties;
 
     public CsLoginRedisService(RedisOperation redisOperation, RedisFinder redisFinder,
-                               CsAllocationService csAllocationService, CsMessageSendSockets sockets) {
+                               CsAllocationService csAllocationService, CsMessageSendSockets sockets,
+                               DeskPresenceProperties presenceProperties) {
         this.redisOperation = redisOperation;
         this.redisFinder = redisFinder;
         this.csAllocationService = csAllocationService;
         this.sockets = sockets;
+        this.presenceProperties = presenceProperties;
     }
 
     /** 登录成功（HTTP）：写 users，删 user-offline-since；以 user-conversation 为准修复碎片，再从待分配队列拉取会话。 */
     public void onLoginSuccess(String loginName) {
         String logintime = LocalDateTime.now().format(LOGIN_TIME);
-        redisOperation.setUsers(loginName, logintime);
+        redisOperation.setUsers(loginName, logintime, presenceProperties.getUsersTtlSeconds());
         redisOperation.deleteUserOfflineSince(loginName);
         repairUserConversationFragments(loginName);
         csAllocationService.pullPendingConversationsForAgent(loginName);
@@ -76,5 +80,34 @@ public class CsLoginRedisService {
         sockets.closeForLogout(loginName);
         // 通知其它实例关闭（空 exceptSessionId 不会排除任何 session）
         redisOperation.publish(CsRedisKeys.CHANNEL_WS_CLOSE_ELSEWHERE, loginName + ":");
+    }
+
+    /**
+     * WebSocket 建立时写在线（与 onLoginSuccess 区分：不拉 pending、不修碎片）。
+     */
+    public void markOnlineFromWebSocket(String loginName) {
+        String logintime = LocalDateTime.now().format(LOGIN_TIME);
+        redisOperation.deleteUserOfflineSince(loginName);
+        redisOperation.setUsers(loginName, logintime, presenceProperties.getUsersTtlSeconds());
+    }
+
+    /**
+     * 心跳或 HTTP 兜底续期：删 offline-since 记录、刷新 {@code users:*} TTL（无完整 onLoginSuccess 副作用）。
+     */
+    public void renewOnlinePresence(String loginName) {
+        if (loginName == null || loginName.isBlank()) return;
+        int ttl = presenceProperties.getUsersTtlSeconds();
+        redisOperation.deleteUserOfflineSince(loginName);
+        if (ttl <= 0) {
+            redisOperation.setUsers(loginName, LocalDateTime.now().format(LOGIN_TIME));
+            return;
+        }
+        if (redisFinder.isUserOnline(loginName)) {
+            if (!redisOperation.renewUsersTtl(loginName, ttl)) {
+                redisOperation.setUsers(loginName, LocalDateTime.now().format(LOGIN_TIME), ttl);
+            }
+        } else {
+            redisOperation.setUsers(loginName, LocalDateTime.now().format(LOGIN_TIME), ttl);
+        }
     }
 }

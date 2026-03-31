@@ -70,6 +70,11 @@ sys:
   cs:
     max-conversations-per-user: 10
     auto-transfer-offline-minutes: 30
+  # Redis 在线续期（users:* TTL、HTTP 节流），详见 docs/redis-online-heartbeat-design.md
+  desk:
+    presence:
+      users-ttl-seconds: 120
+      http-renew-min-interval-ms: 30000
   # API 签名验证配置
   api:
     app-id: ${API_APP_ID:skydawn-desk}

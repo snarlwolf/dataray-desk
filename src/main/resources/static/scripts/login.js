@@ -14,25 +14,29 @@ new Vue({
         loading: false
     },
     mounted: function() {
+        // 必须与 checkLogin 串行：首次无 JSESSIONID 时若并行请求 captcha，会生成两个 Session，
+        // 验证码与最终 Cookie 可能不一致，导致第一次必错、第二次才对。
         this.checkLoginStatus();
-        this.refreshCaptcha();
     },
     methods: {
         checkLoginStatus: function() {
             var self = this;
-            axios.get('/desk/checkLogin')
+            return axios.get('/desk/checkLogin')
                 .then(function(response) {
                     if (response.data.loggedIn) {
                         window.location.href = response.data.redirectUrl;
+                    } else {
+                        return self.refreshCaptcha();
                     }
                 })
                 .catch(function(error) {
                     console.error('Check login error:', error);
+                    return self.refreshCaptcha();
                 });
         },
         refreshCaptcha: function() {
             var self = this;
-            axios.get('/desk/captcha')
+            return axios.get('/desk/captcha')
                 .then(function(response) {
                     self.captchaImage = response.data.image;
                     self.captcha = '';

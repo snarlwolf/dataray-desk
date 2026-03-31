@@ -40,11 +40,13 @@ public final class MessageToGeneralMessageConverter {
         dto.setLongitude(msg.getLongitude());
         dto.setIsStaff(msg.getIsStaff() != null && msg.getIsStaff() == 1);
 
-        // sys_user_id="AISYSTEM" 的消息页面显示灰色背景，通过 isSystemReply=true 传递给前端
+        // 系统自动回复：sys_user_id 为 AISYSTEM（AI 侧）或 AUTO（本机自动回复/结束会话/不支持提示等）
         if (msg.getSysUserId() != null) {
-            dto.setCsStaffName(msg.getSysUserId());
-            if ("AISYSTEM".equals(msg.getSysUserId())) {
+            String sid = msg.getSysUserId();
+            if ("AISYSTEM".equals(sid) || "AUTO".equals(sid)) {
                 dto.setIsSystemReply(true);
+            } else {
+                dto.setCsStaffName(sid);
             }
         }
 

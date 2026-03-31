@@ -9,7 +9,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
  * 客服台 Redis 写入/更新/删除（desk:cs / desk:uq）
- * TTL：仅 user-offline-since 24h、锁 30s。会话相关 key 不设 TTL，由客服手动结束会话时统一删除。
+ * TTL：{@code users:*} 可带活跃续期 TTL；{@code user-offline-since} 24h；锁 30s。会话相关 key 不设 TTL，由客服手动结束会话时统一删除。
  */
 public class RedisOperation {
 
@@ -23,10 +23,28 @@ public class RedisOperation {
         this.redis = redis;
     }
 
-    public void setUsers(String userId, String logintime) {
+    /**
+     * 写在线标记；{@code ttlSeconds <= 0} 时表示不设过期（兼容旧行为，不推荐）。
+     */
+    public void setUsers(String userId, String logintime, long ttlSeconds) {
         if (userId == null || userId.isBlank() || logintime == null) return;
         String key = CsRedisKeys.users(Objects.requireNonNull(userId));
-        redis.opsForValue().set(Objects.requireNonNull(key), Objects.requireNonNull(logintime));
+        if (ttlSeconds <= 0) {
+            redis.opsForValue().set(Objects.requireNonNull(key), Objects.requireNonNull(logintime));
+        } else {
+            redis.opsForValue().set(key, logintime, Duration.ofSeconds(ttlSeconds));
+        }
+    }
+
+    public void setUsers(String userId, String logintime) {
+        setUsers(userId, logintime, 0L);
+    }
+
+    /** 仅刷新 {@code users:*} 的 TTL；key 不存在时返回 false。 */
+    public boolean renewUsersTtl(String userId, long ttlSeconds) {
+        if (userId == null || userId.isBlank() || ttlSeconds <= 0) return false;
+        String key = CsRedisKeys.users(Objects.requireNonNull(userId));
+        return Boolean.TRUE.equals(redis.expire(Objects.requireNonNull(key), Duration.ofSeconds(ttlSeconds)));
     }
 
     public void deleteUsers(String userId) {

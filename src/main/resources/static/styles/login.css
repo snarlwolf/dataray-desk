@@ -6,14 +6,107 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    background: linear-gradient(135deg, #e0f0ff 0%, #b3d9ff 50%, #80c1ff 100%);
+    color: #1e3a5f;
     min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
 }
 
+/* ── 登录页全屏背景（与 maintenance-static/index.html 同源） ── */
+.lp-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.lp-bg-gradient {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(160deg, #dbeafe 0%, #bfdbfe 40%, #93c5fd 100%);
+    background-size: 200% 200%;
+    animation: lp-bgShift 14s ease-in-out infinite;
+}
+
+@keyframes lp-bgShift {
+    0%, 100% { background-position: 0% 40%; }
+    50% { background-position: 100% 60%; }
+}
+
+.lp-bg-curve {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.lp-bg-curve svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.lp-bg-curve--shift {
+    animation: lp-curveDrift 22s ease-in-out infinite;
+}
+
+.lp-bg-curve--shift2 {
+    animation: lp-curveDrift2 26s ease-in-out infinite;
+}
+
+.lp-bg-curve--accent {
+    opacity: 0.88;
+    mix-blend-mode: multiply;
+}
+
+@keyframes lp-curveDrift {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    50% { transform: translateX(-2%) translateY(1.5%); }
+}
+
+@keyframes lp-curveDrift2 {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    50% { transform: translateX(1.5%) translateY(-1%); }
+}
+
+.lp-bg-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(48px);
+    opacity: 0.55;
+    z-index: 1;
+}
+
+.lp-bg-orb--a {
+    width: min(55vw, 380px);
+    height: min(55vw, 380px);
+    background: #5dade2;
+    top: -12%;
+    right: -8%;
+    animation: lp-orbDrift 18s ease-in-out infinite;
+}
+
+.lp-bg-orb--b {
+    width: min(45vw, 300px);
+    height: min(45vw, 300px);
+    background: #85c1e9;
+    bottom: -5%;
+    left: -10%;
+    animation: lp-orbDrift 22s ease-in-out infinite reverse;
+}
+
+@keyframes lp-orbDrift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(20px, -16px) scale(1.05); }
+}
+
 #app {
+    position: relative;
+    z-index: 2;
     width: 100%;
     display: flex;
     justify-content: center;
@@ -165,6 +258,19 @@ body {
 }
 .login-btn-icon {
     font-size: 1.1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lp-bg-gradient,
+    .lp-bg-curve--shift,
+    .lp-bg-curve--shift2,
+    .lp-bg-orb--a,
+    .lp-bg-orb--b {
+        animation: none;
+    }
+    .lp-bg-gradient {
+        background-position: 50% 50%;
+    }
 }
 
 @media (max-width: 480px) {

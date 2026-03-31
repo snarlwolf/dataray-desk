@@ -9,6 +9,40 @@
     <link rel="stylesheet" href="/csdesk/styles/login.css">
 </head>
 <body>
+    <!-- 与 maintenance-static 维护页一致的背景层（渐变 + 曲线色块 + 光斑） -->
+    <div class="lp-bg" aria-hidden="true">
+        <div class="lp-bg-gradient"></div>
+        <div class="lp-bg-curve lp-bg-curve--shift">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="lp-cv1" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.95"/>
+                        <stop offset="100%" stop-color="#bae6fd" stop-opacity="0.75"/>
+                    </linearGradient>
+                    <linearGradient id="lp-cv2" x1="100%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.45"/>
+                        <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.2"/>
+                    </linearGradient>
+                    <linearGradient id="lp-cv3" x1="0%" y1="100%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.18"/>
+                        <stop offset="100%" stop-color="#0284c7" stop-opacity="0.12"/>
+                    </linearGradient>
+                </defs>
+                <path fill="url(#lp-cv1)" d="M0,0 L1440,0 L1440,380 C1200,420 1000,280 720,320 C440,360 200,180 0,260 Z"/>
+                <path fill="url(#lp-cv2)" d="M0,300 C280,260 520,400 780,340 C1040,280 1240,380 1440,320 L1440,560 C1280,620 1040,500 800,560 C560,620 280,520 0,580 Z"/>
+                <path fill="url(#lp-cv3)" d="M0,620 C360,560 680,720 1000,640 C1180,600 1320,660 1440,600 L1440,900 L0,900 Z"/>
+            </svg>
+        </div>
+        <div class="lp-bg-curve lp-bg-curve--accent lp-bg-curve--shift2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="none">
+                <path fill="#38bdf8" fill-opacity="0.14" d="M0,120 C240,200 480,80 720,140 C960,200 1200,100 1440,160 L1440,0 L0,0 Z"/>
+                <path fill="#0369a1" fill-opacity="0.08" d="M0,900 L0,680 C320,740 560,600 880,680 C1120,740 1320,660 1440,720 L1440,900 Z"/>
+            </svg>
+        </div>
+        <div class="lp-bg-orb lp-bg-orb--a"></div>
+        <div class="lp-bg-orb lp-bg-orb--b"></div>
+    </div>
+
     <div id="app">
         <div class="login-container">
             <div class="login-header">

@@ -1,5 +1,6 @@
 package com.skydawn.desk.core.controller;
 
+import com.skydawn.desk.config.DeskPresenceProperties;
 import com.skydawn.desk.core.entity.SysUser;
 import com.skydawn.desk.core.service.SysUserService;
 import com.skydawn.desk.service.CsLoginRedisService;
@@ -37,19 +38,24 @@ public class SysUserLoginController {
     public static final String SESSION_CAPTCHA_KEY = "captchaCode";
 
     private final SysUserService sysUserService;
+    private static final String SESSION_DESK_PRESENCE_RENEW_AT = "deskPresenceRenewAt";
+
     private final CsLoginRedisService csLoginRedisService;
     private final RedisFinder redisFinder;
     private final RedisOperation redisOperation;
     private final CsMessageSendSockets messageSendSockets;
+    private final DeskPresenceProperties deskPresenceProperties;
 
     public SysUserLoginController(SysUserService sysUserService, CsLoginRedisService csLoginRedisService,
                                   RedisFinder redisFinder, RedisOperation redisOperation,
-                                  CsMessageSendSockets messageSendSockets) {
+                                  CsMessageSendSockets messageSendSockets,
+                                  DeskPresenceProperties deskPresenceProperties) {
         this.sysUserService = sysUserService;
         this.csLoginRedisService = csLoginRedisService;
         this.redisFinder = redisFinder;
         this.redisOperation = redisOperation;
         this.messageSendSockets = messageSendSockets;
+        this.deskPresenceProperties = deskPresenceProperties;
     }
 
     /**
@@ -139,12 +145,21 @@ public class SysUserLoginController {
     @GetMapping("/currentUser")
     public ResponseEntity<Map<String, Object>> getCurrentUser(HttpServletRequest request) {
         Map<String, Object> result = new HashMap<>();
-        SysUser user = (SysUser) request.getSession().getAttribute(SESSION_USER_KEY);
+        HttpSession session = request.getSession();
+        SysUser user = (SysUser) session.getAttribute(SESSION_USER_KEY);
 
         if (user == null) {
             result.put("success", false);
             result.put("message", "Not logged in");
             return ResponseEntity.ok(result);
+        }
+
+        long now = System.currentTimeMillis();
+        Long lastRenew = (Long) session.getAttribute(SESSION_DESK_PRESENCE_RENEW_AT);
+        long minIv = deskPresenceProperties.getHttpRenewMinIntervalMs();
+        if (lastRenew == null || now - lastRenew >= minIv) {
+            csLoginRedisService.renewOnlinePresence(user.getUserName());
+            session.setAttribute(SESSION_DESK_PRESENCE_RENEW_AT, now);
         }
 
         result.put("success", true);

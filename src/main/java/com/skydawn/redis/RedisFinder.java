@@ -1,5 +1,8 @@
 package com.skydawn.redis;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.skydawn.common.utils.StringTools;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
@@ -93,6 +96,44 @@ public class RedisFinder {
         String key = CsRedisKeys.conversationMessages(Objects.requireNonNull(conversationId));
         List<String> list = redis.opsForList().range(Objects.requireNonNull(key), 0, -1);
         return list != null ? list : List.of();
+    }
+
+    /**
+     * 会话消息列表中是否已存在带相同 {@code sourceMessageId} 的条目（WABA 等平台侧消息 ID）。
+     * 用于避免「DB 恢复历史已写入 Redis + 当前回调再 append」导致的重复展示。
+     * 仅扫描列表尾部若干条，覆盖 {@link com.skydawn.desk.service.CsSessionRestoreService} 恢复上限并留余量。
+     */
+    public boolean conversationMessagesContainSourceMessageId(String conversationId, String sourceMessageId) {
+        if (conversationId == null || conversationId.isBlank()
+                || sourceMessageId == null || sourceMessageId.isBlank()) {
+            return false;
+        }
+        String key = CsRedisKeys.conversationMessages(Objects.requireNonNull(conversationId));
+        Long size = redis.opsForList().size(Objects.requireNonNull(key));
+        if (size == null || size == 0) {
+            return false;
+        }
+        final int tailMax = 400;
+        long start = size <= tailMax ? 0 : size - tailMax;
+        List<String> slice = redis.opsForList().range(key, start, -1);
+        if (slice == null) {
+            return false;
+        }
+        for (String json : slice) {
+            if (json == null || json.isBlank()) {
+                continue;
+            }
+            try {
+                JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+                JsonElement el = obj.get("sourceMessageId");
+                if (el != null && el.isJsonPrimitive() && sourceMessageId.equals(el.getAsString())) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+                // 非 GeneralMessageDto JSON（如 kind=message_status）跳过
+            }
+        }
+        return false;
     }
 
     public Set<String> getUserConversationList(String userId) {

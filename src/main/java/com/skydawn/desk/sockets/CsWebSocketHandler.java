@@ -16,6 +16,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import com.skydawn.desk.core.controller.SysUserLoginController;
 import com.skydawn.desk.core.entity.SysUser;
 import com.skydawn.desk.service.CsColleagueNotifyService;
+import com.skydawn.desk.service.CsLoginRedisService;
 import com.skydawn.redis.RedisOperation;
 
 /**
@@ -30,12 +31,15 @@ public class CsWebSocketHandler extends TextWebSocketHandler {
     private final CsMessageSendSockets sockets;
     private final RedisOperation redisOperation;
     private final CsColleagueNotifyService colleagueNotifyService;
+    private final CsLoginRedisService csLoginRedisService;
 
     public CsWebSocketHandler(CsMessageSendSockets sockets, RedisOperation redisOperation,
-                              CsColleagueNotifyService colleagueNotifyService) {
+                              CsColleagueNotifyService colleagueNotifyService,
+                              CsLoginRedisService csLoginRedisService) {
         this.sockets = sockets;
         this.redisOperation = redisOperation;
         this.colleagueNotifyService = colleagueNotifyService;
+        this.csLoginRedisService = csLoginRedisService;
     }
 
     @Override
@@ -48,12 +52,8 @@ public class CsWebSocketHandler extends TextWebSocketHandler {
         }
         String loginName = user.getUserName();
 
-        // 删除曾下线的记录（若存在）
-        redisOperation.deleteUserOfflineSince(loginName);
-
-        // users：在线标记；user-conversation 不在此处写入，重连时保留原列表（仅分配会话时 SADD）
-        String logintime = LocalDateTime.now().format(LOGIN_TIME);
-        redisOperation.setUsers(loginName, logintime);
+        // users：在线标记（带 TTL 续期）；user-conversation 不在此处写入，重连时保留原列表（仅分配会话时 SADD）
+        csLoginRedisService.markOnlineFromWebSocket(loginName);
 
         sockets.register(loginName, session);
 
@@ -65,6 +65,10 @@ public class CsWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message) throws Exception {
         String payload = message.getPayload();
         if (payload != null && payload.contains("\"kind\"") && payload.contains("\"ping\"")) {
+            Object attr = session.getAttributes().get(SysUserLoginController.SESSION_USER_KEY);
+            if (attr instanceof SysUser user) {
+                csLoginRedisService.renewOnlinePresence(user.getUserName());
+            }
             session.sendMessage(new TextMessage("{\"kind\":\"pong\"}"));
         }
     }

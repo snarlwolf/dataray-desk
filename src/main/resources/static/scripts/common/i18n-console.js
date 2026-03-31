@@ -73,7 +73,10 @@
             mapChoiceBing: 'Open with Bing Maps',
             contextMenuReaction: 'Like / Reaction',
             contextMenuReply: 'Reply',
-            replyingToLabel: 'Replying to: '
+            replyingToLabel: 'Replying to: ',
+            aiReplyBadge: '[AI reply] ',
+            staffReplyBadge: '[{name} replied] ',
+            colleagueCurrentSessionCount: 'Current sessions: {count}'
         },
         zh: {
             pageTitle: '客服工作台',
@@ -139,7 +142,10 @@
             mapChoiceBing: '使用必应地图打开',
             contextMenuReaction: '点赞表情',
             contextMenuReply: '回复',
-            replyingToLabel: '正在回复消息：'
+            replyingToLabel: '正在回复消息：',
+            aiReplyBadge: '[AI回复] ',
+            staffReplyBadge: '[{name}回复] ',
+            colleagueCurrentSessionCount: '当前会话数：{count}'
         },
         ms: {
             pageTitle: 'Meja Khidmat Pelanggan',
@@ -205,7 +211,10 @@
             mapChoiceBing: 'Buka dengan Bing Maps',
             contextMenuReaction: 'Reaksi / Suka',
             contextMenuReply: 'Balas',
-            replyingToLabel: 'Membalas mesej: '
+            replyingToLabel: 'Membalas mesej: ',
+            aiReplyBadge: '[Balasan AI] ',
+            staffReplyBadge: '[{name} membalas] ',
+            colleagueCurrentSessionCount: 'Sesi semasa: {count}'
         }
     };
 
