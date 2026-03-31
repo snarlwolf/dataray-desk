@@ -125,6 +125,12 @@ public class RedisOperation {
         redis.opsForValue().set(key, String.valueOf(conversationDbId));
     }
 
+    public void deleteConversationDbId(String redisConversationId) {
+        if (redisConversationId == null || redisConversationId.isBlank()) return;
+        String key = CsRedisKeys.conversationDbId(redisConversationId);
+        redis.delete(Objects.requireNonNull(key));
+    }
+
     public void deleteConversationPhone(String conversationId) {
         if (conversationId == null || conversationId.isBlank()) return;
         String key = CsRedisKeys.conversationPhone(Objects.requireNonNull(conversationId));
@@ -155,12 +161,16 @@ public class RedisOperation {
         return Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(Objects.requireNonNull(lockKey), Objects.requireNonNull(value), Objects.requireNonNull(Duration.ofSeconds(TTL_LOCK_SECONDS))));
     }
 
-    public void unlock(String lockKey) {
-        if (lockKey == null) return;
-        redis.delete(Objects.requireNonNull(lockKey));
+    /**
+     * 安全释放分布式锁：通过 Lua 脚本原子校验 value 后再删除，防止锁过期后误删他人锁。
+     * value 必须与 {@link #tryLock} 时传入的值一致，不匹配时静默跳过（锁已过期或已被他人占用）。
+     */
+    public void unlock(String lockKey, String value) {
+        if (lockKey == null || value == null) return;
+        redis.execute(Objects.requireNonNull(CsRedisScripts.unlock()), Objects.requireNonNull(List.of(lockKey)), value);
     }
 
-    /** 结束会话：删除 user-conversation 成员、conversation-user、type、phone、messages，并负载 ZSET -1 */
+    /** 结束会话：删除 user-conversation 成员、conversation-user、type、phone、messages、db-id，并负载 ZSET -1 */
     public void endSessionAtomic(String fromId, String userId, String conversationId) {
         if (fromId == null || userId == null || conversationId == null) return;
         String userConvKey = CsRedisKeys.userConversation(Objects.requireNonNull(userId));
@@ -170,7 +180,14 @@ public class RedisOperation {
         deleteConversationType(conversationId);
         deleteConversationPhone(conversationId);
         deleteConversationMessages(conversationId);
+        deleteConversationDbId(conversationId);
         decrLoadZset(userId);
+    }
+
+    /** 删除 AI 系统创建的会话转人工标记 key（不存在时为 no-op） */
+    public void deleteAiConversationTransferAgentKey(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) return;
+        redis.delete(CsRedisKeys.aiConversationTransferAgentKey(conversationId));
     }
 
     // ---------- 负载 ZSET（desk:cs:load:zset），用于选负载最小的客服 ----------
@@ -226,6 +243,13 @@ public class RedisOperation {
         return added != null && added == 1L;
     }
 
+    /** 从待分配队列移除指定会话（LIST LREM + SET SREM），用于登录时清理已分配会话的 pending 碎片 */
+    public void pendingConversationsRemove(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) return;
+        redis.opsForList().remove(CsRedisKeys.PENDING_CONVERSATIONS_LIST, 0, conversationId);
+        redis.opsForSet().remove(CsRedisKeys.PENDING_CONVERSATIONS_SET, conversationId);
+    }
+
     /** 从待分配队列 FIFO 弹出最多 count 条，每次最多建议 5 条避免独占 */
     public List<String> pendingConversationsPopMulti(int count) {
         if (count <= 0) return List.of();
@@ -233,6 +257,18 @@ public class RedisOperation {
                 List.of(CsRedisKeys.PENDING_CONVERSATIONS_LIST, CsRedisKeys.PENDING_CONVERSATIONS_SET),
                 String.valueOf(count));
         return list != null ? list : Collections.emptyList();
+    }
+
+    /** 存储用户在线档案（deptId/nickName/avatar JSON），WebSocket 建立时写入 */
+    public void setUserProfile(String userName, String profileJson) {
+        if (userName == null || userName.isBlank() || profileJson == null) return;
+        redis.opsForValue().set(CsRedisKeys.userProfile(userName), profileJson);
+    }
+
+    /** 删除用户在线档案，WebSocket 断开时调用 */
+    public void deleteUserProfile(String userName) {
+        if (userName == null || userName.isBlank()) return;
+        redis.delete(CsRedisKeys.userProfile(userName));
     }
 
     /** 发布消息到指定频道（用于多实例挤掉旧 WebSocket） */

@@ -4,6 +4,7 @@ import com.skydawn.common.Defs;
 import com.skydawn.desk.dto.GeneralMessageDto;
 import com.skydawn.desk.message.waba.WabaToGeneralMessageConverter;
 import com.skydawn.desk.service.CsAllocationService;
+import com.skydawn.desk.service.CsSessionRestoreService;
 import com.skydawn.ingest.dto.WabaMessageDto;
 import com.skydawn.ingest.parser.WabaParser;
 import org.slf4j.Logger;
@@ -26,9 +27,12 @@ public class WabaMessageFromAISysController {
     private String expectedToken;
 
     private final CsAllocationService csAllocationService;
+    private final CsSessionRestoreService csSessionRestoreService;
 
-    public WabaMessageFromAISysController(CsAllocationService csAllocationService) {
+    public WabaMessageFromAISysController(CsAllocationService csAllocationService,
+                                           CsSessionRestoreService csSessionRestoreService) {
         this.csAllocationService = csAllocationService;
+        this.csSessionRestoreService = csSessionRestoreService;
     }
 
     @PostMapping("/waba")
@@ -51,6 +55,11 @@ public class WabaMessageFromAISysController {
 
         GeneralMessageDto general = WabaToGeneralMessageConverter.fromWaba(dto);
         try {
+            // 若 Redis 中无活跃会话，尝试从数据库恢复历史会话（仅内容类消息才有意义）
+            if (general.getMessageType() != GeneralMessageDto.MessageType.STATUS
+                    && general.getMessageType() != GeneralMessageDto.MessageType.REACTION) {
+                csSessionRestoreService.restoreIfNeeded(general.getOfficialAccount(), general.getClientId());
+            }
             csAllocationService.receiveMessage(general);
         } catch (Exception e) {
             log.error("receiveMessage route/push failed", e);

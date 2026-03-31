@@ -83,6 +83,10 @@ public class WabaMessageFromRelayController {
         }
         general.setConversationId(redisConvId); // 供 toMessage 写入 message.redis_conversation_id
         Long convId = conversationService.getOrCreateByRedisConversationId(redisConvId, general.getOfficialAccount(), "waba");
+        if (convId == null) {
+            log.warn("WabaMessageFromRelay: convId is null (redisConvId blank?), skip insert, redisConvId={}", redisConvId);
+            return ResponseEntity.ok("success");
+        }
         Message msg = GeneralMessageToMessageConverter.toMessage(general, convId, null);
         // STATUS 去重：同一回调被重复推送或多路转发时只入库一条，避免两条 DELIVERED 等
         boolean skipInsert = false;

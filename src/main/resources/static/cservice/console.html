@@ -68,17 +68,17 @@
                 <!-- 滑块3 - 在线同事 -->
                 <div class="slider-block">
                     <button type="button" class="slider-head" :class="{ active: leftTab === 'colleagues' }" @click="leftTab = 'colleagues'">
-                        <i class="bi bi-person-vcard slider-head-icon" aria-hidden="true"></i><span class="slider-head-label">{{ t('colleagues') }}</span>
+                        <i class="bi bi-person-vcard slider-head-icon" aria-hidden="true"></i><span class="slider-head-label">{{ t('colleagues') }}<span class="colleagues-online-count">({{ t('onlineCount') }}:{{ colleaguesList.length }})</span></span>
                         <span v-if="colleaguesUnreadTotal > 0" class="slider-badge">{{ colleaguesUnreadDisplay }}</span>
                     </button>
                     <transition name="slide">
                         <div v-if="leftTab === 'colleagues'" class="slider-body">
-                        <p class="placeholder-tip">{{ t('comingSoon') }}</p>
                         <ul class="colleague-list">
-                            <li v-for="c in colleaguesList" :key="c.userId" class="colleague-item">
-                                <span class="avatar">{{ c.avatarText || (c.nickname && c.nickname.slice(0,1)) || '-' }}</span>
-                                <span class="name">{{ c.nickname || c.username }}</span>
-                                <span v-if="c.unread > 0" class="item-badge">{{ unreadDisplay(c.unread) }}</span>
+                            <li v-for="c in colleaguesList" :key="c.userName" class="colleague-item">
+                                <img v-if="c.avatar" :src="c.avatar" class="colleague-avatar-img" :alt="c.nickName" />
+                                <span v-else class="colleague-avatar-text">{{ c.nickName ? c.nickName.slice(0,1) : '-' }}</span>
+                                <span class="colleague-name">{{ c.nickName || c.userName }}</span>
+                                <span class="colleague-conv-count" :title="t('conversationCount')">{{ c.conversationCount }}</span>
                             </li>
                             <li v-if="colleaguesList.length === 0" class="empty-tip">{{ t('noColleagues') }}</li>
                         </ul>
@@ -207,6 +207,15 @@
                 <p class="placeholder-tip">{{ t('todo') }}</p>
             </section>
         </main>
+        <!-- 被挤下线遮罩 -->
+        <div v-if="wsKicked" class="kicked-overlay">
+            <div class="kicked-box">
+                <p class="kicked-icon">⚠️</p>
+                <p class="kicked-title">{{ t('loggedInElsewhere') }}</p>
+                <p class="kicked-msg">{{ t('kickedOutMsg') }}</p>
+                <button type="button" class="kicked-btn" @click="reloginFromKick">{{ t('reloginBtn') }}</button>
+            </div>
+        </div>
         <!-- 图片满屏预览 -->
         <div v-if="previewImageUrl" class="image-preview-overlay" @click.self="closeImagePreview">
             <button type="button" class="image-preview-close" :aria-label="t('close')" @click="closeImagePreview">×</button>

@@ -2,7 +2,7 @@ package com.skydawn.desk.core.converter;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 import com.skydawn.common.utils.IdCreator;
 import com.skydawn.desk.core.entity.Message;
@@ -65,6 +65,6 @@ public final class GeneralMessageToMessageConverter {
     }
 
     private static OffsetDateTime toOffsetDateTime(long epochSeconds) {
-        return OffsetDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneId.systemDefault());
+        return OffsetDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneOffset.UTC);
     }
 }

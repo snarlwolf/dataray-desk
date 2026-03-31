@@ -48,6 +48,27 @@
         SELECT * FROM message WHERE redis_conversation_id = #{redisConversationId} AND (del_flag IS NULL OR del_flag != '1') ORDER BY send_time ASC
     </select>
 
+    <select id="findLatestNormalByClientIdAndAccount" resultMap="BaseResultMap">
+        SELECT * FROM message
+        WHERE client_id = #{clientId}
+          AND official_account = #{officialAccount}
+          AND message_status = 'NORMAL'
+          AND (del_flag IS NULL OR del_flag != '1')
+        ORDER BY send_time DESC
+        LIMIT 1
+    </select>
+
+    <select id="findRecentByConversationId" resultMap="BaseResultMap">
+        SELECT * FROM (
+            SELECT * FROM message
+            WHERE conversation_id = #{conversationId}
+              AND (del_flag IS NULL OR del_flag != '1')
+            ORDER BY send_time DESC
+            LIMIT #{limit}
+        ) sub
+        ORDER BY send_time ASC
+    </select>
+
     <select id="countByRedisConvIdAndSourceMessageIdAndTypeAndStatus" resultType="int">
         SELECT COUNT(*) FROM message
         WHERE redis_conversation_id = #{redisConversationId}

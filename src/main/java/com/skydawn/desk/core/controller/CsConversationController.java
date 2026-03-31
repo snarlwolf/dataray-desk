@@ -1,7 +1,6 @@
 package com.skydawn.desk.core.controller;
 
 import com.skydawn.desk.core.entity.SysUser;
-import com.skydawn.desk.core.service.SysUserService;
 import com.skydawn.desk.service.CsAllocationService;
 import com.skydawn.redis.CsRedisKeys;
 import com.skydawn.redis.RedisFinder;
@@ -23,12 +22,10 @@ import java.util.stream.Collectors;
 public class CsConversationController {
 
     private final CsAllocationService csAllocationService;
-    private final SysUserService sysUserService;
     private final RedisFinder redisFinder;
 
-    public CsConversationController(CsAllocationService csAllocationService, SysUserService sysUserService, RedisFinder redisFinder) {
+    public CsConversationController(CsAllocationService csAllocationService, RedisFinder redisFinder) {
         this.csAllocationService = csAllocationService;
-        this.sysUserService = sysUserService;
         this.redisFinder = redisFinder;
     }
 
@@ -51,14 +48,18 @@ public class CsConversationController {
             result.put("message", "conversationId required");
             return ResponseEntity.ok(result);
         }
-        csAllocationService.endSession(conversationId, user.getUserName());
+        String warning = csAllocationService.endSession(conversationId, user.getUserName());
         result.put("success", true);
+        if (warning != null) {
+            result.put("warning", warning);
+        }
         return ResponseEntity.ok(result);
     }
 
     /**
      * 单会话转移
-     * POST /desk/conversation/transfer  body: { "conversationId": "...", "toUserId": "..." }
+     * POST /desk/conversation/transfer  body: { "conversationId": "...", "toUserName": "..." }
+     * toUserName 为目标客服的登录名（userName），前端从在线同事列表取得。
      */
     @PostMapping("/conversation/transfer")
     public ResponseEntity<Map<String, Object>> transfer(@RequestBody Map<String, String> body, HttpServletRequest request) {
@@ -70,26 +71,15 @@ public class CsConversationController {
             return ResponseEntity.ok(result);
         }
         String conversationId = body.get("conversationId");
-        String toUserIdStr = body.get("toUserId");
-        if (conversationId == null || toUserIdStr == null || conversationId.isBlank() || toUserIdStr.isBlank()) {
+        String toUserName = body.get("toUserName");
+        if (conversationId == null || toUserName == null || conversationId.isBlank() || toUserName.isBlank()) {
             result.put("success", false);
-            result.put("message", "conversationId and toUserId required");
+            result.put("message", "conversationId and toUserName required");
             return ResponseEntity.ok(result);
         }
         try {
-            Long toUserId = Long.parseLong(toUserIdStr);
-            SysUser toUser = sysUserService.findById(toUserId);
-            if (toUser == null) {
-                result.put("success", false);
-                result.put("message", "toUserId not found");
-                return ResponseEntity.ok(result);
-            }
-            String toLoginName = toUser.getUserName();
-            csAllocationService.transferSingle(conversationId, user.getUserName(), toLoginName);
+            csAllocationService.transferSingle(conversationId, user.getUserName(), toUserName);
             result.put("success", true);
-        } catch (NumberFormatException e) {
-            result.put("success", false);
-            result.put("message", "toUserId invalid");
         } catch (IllegalArgumentException e) {
             result.put("success", false);
             result.put("message", e.getMessage());

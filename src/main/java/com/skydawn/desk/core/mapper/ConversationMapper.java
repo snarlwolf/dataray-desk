@@ -17,5 +17,8 @@ public interface ConversationMapper {
 
     int update(Conversation conversation);
 
+    /** 关闭会话：更新 status='2' 和 close_time */
+    int closeById(Long id);
+
     int deleteById(Long id);
 }

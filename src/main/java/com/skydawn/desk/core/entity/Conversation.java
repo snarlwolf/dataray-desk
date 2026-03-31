@@ -1,6 +1,5 @@
 package com.skydawn.desk.core.entity;
 
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 import lombok.Data;
@@ -13,7 +12,9 @@ public class Conversation {
 
     private Long id;
     private Long userId;
-    private String accountNo;
+    private String officialAccount;
+    private String sessionId;
+    private String clientId;
     private String channel;
     private String status;
     private OffsetDateTime requestTime;
@@ -23,9 +24,9 @@ public class Conversation {
     private String agentName;
     private Boolean isTransferAgent;
     private String currentReplyStatus;
-    private LocalDateTime createTime;
+    private OffsetDateTime createTime;
     private String createBy;
-    private LocalDateTime updateTime;
+    private OffsetDateTime updateTime;
     private String updateBy;
     private String delFlag;
     private String remarks;
@@ -34,8 +35,12 @@ public class Conversation {
     public void setId(Long id) { this.id = id; }
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
-    public String getAccountNo() { return accountNo; }
-    public void setAccountNo(String accountNo) { this.accountNo = accountNo; }
+    public String getOfficialAccount() { return officialAccount; }
+    public void setOfficialAccount(String officialAccount) { this.officialAccount = officialAccount; }
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+    public String getClientId() { return clientId; }
+    public void setClientId(String clientId) { this.clientId = clientId; }
     public String getChannel() { return channel; }
     public void setChannel(String channel) { this.channel = channel; }
     public String getStatus() { return status; }
@@ -54,12 +59,12 @@ public class Conversation {
     public void setIsTransferAgent(Boolean isTransferAgent) { this.isTransferAgent = isTransferAgent; }
     public String getCurrentReplyStatus() { return currentReplyStatus; }
     public void setCurrentReplyStatus(String currentReplyStatus) { this.currentReplyStatus = currentReplyStatus; }
-    public LocalDateTime getCreateTime() { return createTime; }
-    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public OffsetDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(OffsetDateTime createTime) { this.createTime = createTime; }
     public String getCreateBy() { return createBy; }
     public void setCreateBy(String createBy) { this.createBy = createBy; }
-    public LocalDateTime getUpdateTime() { return updateTime; }
-    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
+    public OffsetDateTime getUpdateTime() { return updateTime; }
+    public void setUpdateTime(OffsetDateTime updateTime) { this.updateTime = updateTime; }
     public String getUpdateBy() { return updateBy; }
     public void setUpdateBy(String updateBy) { this.updateBy = updateBy; }
     public String getDelFlag() { return delFlag; }

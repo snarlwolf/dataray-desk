@@ -26,24 +26,39 @@ public class ConversationService {
      * 按 Redis 会话 id 获取或创建库表会话，返回 conversation.id。先查 Redis 缓存，无则建新会话并写入缓存。
      *
      * @param redisConversationId Redis 会话 id（如 officialAccount-clientId）
-     * @param accountNo          账号/推广号，可为 null
-     * @param channel            渠道（如 "waba"），可为 null
+     * @param officialAccount     官方账号/推广号，对应表字段 official_account，可为 null
+     * @param channel             渠道（如 "waba"），可为 null
      * @return conversation.id，不会为 null
      */
-    public Long getOrCreateByRedisConversationId(String redisConversationId, String accountNo, String channel) {
+    public Long getOrCreateByRedisConversationId(String redisConversationId, String officialAccount, String channel) {
         if (redisConversationId == null || redisConversationId.isBlank()) {
-            redisConversationId = "unknown";
+            return null;
         }
         Long cached = redisOperation.getConversationDbId(redisConversationId);
         if (cached != null) {
-            return cached;
+            // 验证缓存的会话是否仍处于未关闭状态；若已关闭则清除缓存，重新建会话
+            Conversation existing = conversationMapper.findById(cached);
+            if (existing != null && !"2".equals(existing.getStatus())) {
+                return cached;
+            }
+            redisOperation.deleteConversationDbId(redisConversationId);
         }
         Conversation conv = new Conversation();
         conv.setId(IdCreator.createSnowId());
-        conv.setAccountNo(accountNo);
+        conv.setOfficialAccount(officialAccount);
+        conv.setSessionId(redisConversationId);
         conv.setChannel(channel);
+        conv.setStatus("0");
         conversationMapper.insert(conv);
         redisOperation.setConversationDbId(redisConversationId, conv.getId());
         return conv.getId();
+    }
+
+    /**
+     * 将指定会话标记为已关闭（status='2'，close_time=NOW()）。
+     */
+    public void markClosed(Long conversationDbId) {
+        if (conversationDbId == null) return;
+        conversationMapper.closeById(conversationDbId);
     }
 }

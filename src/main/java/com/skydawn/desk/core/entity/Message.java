@@ -1,6 +1,5 @@
 package com.skydawn.desk.core.entity;
 
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 import lombok.Data;
@@ -39,9 +38,9 @@ public class Message {
     private String sysUserId;
     private String delFlag;
     private String remarks;
-    private LocalDateTime createTime;
+    private OffsetDateTime createTime;
     private String createBy;
-    private LocalDateTime updateTime;
+    private OffsetDateTime updateTime;
     private String updateBy;
 
     public Long getId() { return id; }
@@ -98,12 +97,12 @@ public class Message {
     public void setDelFlag(String delFlag) { this.delFlag = delFlag; }
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
-    public LocalDateTime getCreateTime() { return createTime; }
-    public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public OffsetDateTime getCreateTime() { return createTime; }
+    public void setCreateTime(OffsetDateTime createTime) { this.createTime = createTime; }
     public String getCreateBy() { return createBy; }
     public void setCreateBy(String createBy) { this.createBy = createBy; }
-    public LocalDateTime getUpdateTime() { return updateTime; }
-    public void setUpdateTime(LocalDateTime updateTime) { this.updateTime = updateTime; }
+    public OffsetDateTime getUpdateTime() { return updateTime; }
+    public void setUpdateTime(OffsetDateTime updateTime) { this.updateTime = updateTime; }
     public String getUpdateBy() { return updateBy; }
     public void setUpdateBy(String updateBy) { this.updateBy = updateBy; }
 }

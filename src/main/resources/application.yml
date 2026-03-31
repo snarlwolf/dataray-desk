@@ -6,6 +6,7 @@ server:
     session:
       cookie:
         same-site: Lax
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -31,10 +32,11 @@ spring:
       maximum-pool-size: 20
       connection-timeout: 30000
       idle-timeout: 600000
-      max-lifetime: 1800000
+      # 设为 25 分钟，低于 PostgreSQL 服务端/防火墙的空闲断连时间（约 28~30 分钟）
+      max-lifetime: 1500000
       leak-detection-threshold: 60000
-      # PostgreSQL 推荐使用 isValid() 而非 SELECT 1
-      # connection-test-query: SELECT 1
+      # 每 60 秒对空闲连接发一次心跳（isValid() 检测），防止连接被服务端静默关闭
+      keepalive-time: 60000
 
   # ==================== Redis ====================
   data:

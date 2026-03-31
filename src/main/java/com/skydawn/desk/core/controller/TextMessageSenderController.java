@@ -89,6 +89,7 @@ public class TextMessageSenderController {
                 GeneralMessageDto staffMsg = new GeneralMessageDto();
                 staffMsg.setConversationId(conversationId);
                 staffMsg.setClientId(clientId);
+                staffMsg.setClientName(dto != null ? dto.getClientName() : null);
                 staffMsg.setTextBody(textBody);
                 staffMsg.setSourceMessageId(wabaResp.getMessageId());
                 staffMsg.setTimestamp(System.currentTimeMillis() / 1000);
@@ -109,10 +110,14 @@ public class TextMessageSenderController {
                 redisOperation.appendConversationMessage(conversationId, GSON.toJson(staffMsg));
                 // 客服回复同时入库 message
                 Long convId = conversationService.getOrCreateByRedisConversationId(conversationId, officialAccount, "waba");
-                Message msg = GeneralMessageToMessageConverter.toMessage(staffMsg, convId, null);
-                msg.setIsStaff(1);
-                msg.setSysUserId(staffUserName);
-                messageMapper.insert(msg);
+                if (convId != null) {
+                    Message msg = GeneralMessageToMessageConverter.toMessage(staffMsg, convId, null);
+                    msg.setIsStaff(1);
+                    msg.setSysUserId(staffUserName);
+                    messageMapper.insert(msg);
+                } else {
+                    log.warn("sendMessage: convId is null, skip insert, conversationId={}", conversationId);
+                }
             } else {
                 log.warn("WABA send failed conversationId={}", conversationId);
                 result.put("success", false);

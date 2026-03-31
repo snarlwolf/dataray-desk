@@ -27,7 +27,10 @@ new Vue({
         colleaguesList: [],
         selectedConversationId: null,
         selectedClientId: null,
+        selectedClientName: null,
         ws: null,
+        /** 被挤下线时置 true，展示遮罩并阻止 WS 重连 */
+        wsKicked: false,
         /** 按会话 key(conversationId||clientId) 存储消息列表 */
         messageListByConversation: {},
         /** 发送框输入内容 */
@@ -123,12 +126,18 @@ new Vue({
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && self.previewImageUrl) self.closeImagePreview();
             if (e.key === 'Escape' && self.emojiOpen) self.emojiOpen = false;
+            self.resetInactivityTimer();
         });
         document.addEventListener('click', function() {
             self.emojiOpen = false;
+            self.resetInactivityTimer();
         });
+        document.addEventListener('touchstart', function() {
+            self.resetInactivityTimer();
+        }, { passive: true });
     },
     beforeDestroy: function() {
+        this.stopInactivityTimer();
         if (this._wabaReadObserver) {
             this._wabaReadObserver.disconnect();
             this._wabaReadObserver = null;
@@ -398,6 +407,8 @@ new Vue({
                 self.ws = new WebSocket(wsUrl);
                 self.ws.onopen = function() {
                     console.log('WebSocket connected');
+                    self._wsReconnectAttempts = 0;
+                    self.startInactivityTimer();
                     self.loadConversationsFromServer();
                     var HEARTBEAT_INTERVAL_MS = 25000;
                     self._wsHeartbeatIntervalId = setInterval(function() {
@@ -415,6 +426,7 @@ new Vue({
                     }, HEARTBEAT_INTERVAL_MS);
                 };
                 self.ws.onmessage = function(ev) {
+                    self.resetInactivityTimer();
                     try {
                         var msg = JSON.parse(ev.data);
                         if (msg.kind === 'pong') return;
@@ -456,6 +468,14 @@ new Vue({
                             }
                             return;
                         }
+                        // 在线同事列表：全量替换，排除自己
+                        if (msg.kind === 'colleagues') {
+                            var list = Array.isArray(msg.list) ? msg.list : [];
+                            self.colleaguesList = list.filter(function(c) {
+                                return c.userName !== self.username;
+                            });
+                            return;
+                        }
                         var clientIdVal = msg.clientId || '';
                         var conversationId = msg.conversationId || '';
                         var displayName = msg.clientName || clientIdVal;
@@ -490,12 +510,33 @@ new Vue({
                         self._wsHeartbeatIntervalId = null;
                     }
                     if (ev && ev.code === 4000) {
-                        // 被挤下线：不弹提示，直接清空服务端登录信息并跳转登录页
-                        axios.post('/desk/logout').finally(function() {
-                            window.location.href = '/csdesk/cserviceLogin.html';
-                        });
+                        // 被挤下线：不跳转、不重连，展示遮罩等待用户主动操作。
+                        // 不能在这里调 /desk/logout，否则会销毁另一个标签页正在使用的 HTTP session，造成双向踢出死循环。
+                        self.stopInactivityTimer();
+                        self.wsKicked = true;
                     } else {
-                        console.log('WebSocket closed');
+                        // 非主动关闭（网络抖动/服务重启等）：自动重连，最多 3 次；超限后跳转登录页
+                        if (self.wsKicked) return;
+                        self._wsReconnectAttempts = (self._wsReconnectAttempts || 0) + 1;
+                        console.log('WebSocket closed unexpectedly, reconnect attempt ' + self._wsReconnectAttempts);
+                        if (self._wsReconnectAttempts <= 3) {
+                            setTimeout(function() {
+                                axios.get('/desk/currentUser').then(function(res) {
+                                    if (res.data && res.data.success) {
+                                        self.connectWebSocket();
+                                    } else {
+                                        self.stopInactivityTimer();
+                                        window.location.href = '/csdesk/cserviceLogin.html';
+                                    }
+                                }).catch(function() {
+                                    self.stopInactivityTimer();
+                                    window.location.href = '/csdesk/cserviceLogin.html';
+                                });
+                            }, 3000);
+                        } else {
+                            self.stopInactivityTimer();
+                            window.location.href = '/csdesk/cserviceLogin.html';
+                        }
                     }
                 };
                 self.ws.onerror = function(err) {
@@ -505,7 +546,32 @@ new Vue({
                 console.error('WebSocket connect error', e);
             }
         },
+        /** 启动/重置 5 分钟无操作自动登出定时器 */
+        startInactivityTimer: function() {
+            var self = this;
+            if (self._inactivityTimer) clearTimeout(self._inactivityTimer);
+            self._inactivityTimer = setTimeout(function() {
+                console.log('Inactivity timeout, auto logout');
+                self.handleLogout();
+            }, 5 * 60 * 1000);
+        },
+        resetInactivityTimer: function() {
+            if (this._inactivityTimer) this.startInactivityTimer();
+        },
+        stopInactivityTimer: function() {
+            if (this._inactivityTimer) {
+                clearTimeout(this._inactivityTimer);
+                this._inactivityTimer = null;
+            }
+        },
+        /** 被挤下线后用户主动点击「重新登录」：先 logout 销毁当前 session，再跳转 */
+        reloginFromKick: function() {
+            axios.post('/desk/logout').finally(function() {
+                window.location.href = '/csdesk/cserviceLogin.html';
+            });
+        },
         handleLogout: function() {
+            this.stopInactivityTimer();
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.ws.close();
             }
@@ -523,6 +589,7 @@ new Vue({
         selectConversation: function(item) {
             this.selectedConversationId = item.id;
             this.selectedClientId = item.clientId;
+            this.selectedClientName = item.displayName || item.clientId || null;
             this.$set(item, 'unread', 0);
             var self = this;
             this.$nextTick(function() { self.setupWabaReadObserver(); });
@@ -577,6 +644,7 @@ new Vue({
         },
         sendMessage: function() {
             var self = this;
+            this.resetInactivityTimer();
             if (this.sending) return;
             var text = (this.sendText || '').trim();
             if (!text) {
@@ -592,7 +660,8 @@ new Vue({
             var payload = {
                 conversationId: this.selectedConversationId,
                 textBody: text,
-                clientId: this.selectedClientId
+                clientId: this.selectedClientId,
+                clientName: this.selectedClientName
             };
             if (referencedMessageId) payload.referencedMessageId = referencedMessageId;
             axios.post('/desk/message/send', payload)
@@ -644,6 +713,7 @@ new Vue({
             if (this.selectedConversationId === conversationId || this.selectedClientId === conversationId) {
                 this.selectedConversationId = null;
                 this.selectedClientId = null;
+                this.selectedClientName = null;
             }
         },
         formatMessageTime: function(ts) {
@@ -872,21 +942,52 @@ new Vue({
             });
         },
         handleTransferClick: function() {
-            var toUserId = prompt(this.t('enterToUserId'));
-            if (toUserId != null && toUserId.trim()) {
-                this.transferSession(toUserId.trim());
-            }
-        },
-        transferSession: function(toUserId) {
             var self = this;
-            if (!this.selectedConversationId || !toUserId) {
+            if (!this.selectedConversationId) {
+                Dialog.alert({ title: this.t('alertTitle'), message: this.t('selectConversationFirst') });
+                return;
+            }
+            // 在线同事列表按会话数增序排序，排除自己
+            var candidates = (this.colleaguesList || []).slice().sort(function(a, b) {
+                return (a.conversationCount || 0) - (b.conversationCount || 0);
+            });
+            if (candidates.length === 0) {
+                Dialog.alert({ title: this.t('alertTitle'), message: this.t('noColleaguesForTransfer') });
+                return;
+            }
+            var options = candidates.map(function(c) {
+                var label = (c.nickName || c.userName) + '  (' + self.t('conversationCount') + ': ' + (c.conversationCount || 0) + ')';
+                return { text: label, value: c.userName };
+            });
+            Dialog.choose({
+                title: this.t('transferSelectTitle'),
+                options: options,
+                cancelText: this.t('close') || '取消',
+                optionsListStyle: true,
+                theme: 'darkHeader'
+            }).then(function(selectedUserName) {
+                if (!selectedUserName) return;
+                var colleague = candidates.find(function(c) { return c.userName === selectedUserName; });
+                var displayName = colleague ? (colleague.nickName || colleague.userName) : selectedUserName;
+                Dialog.confirm({
+                    title: self.t('transferConfirmTitle'),
+                    message: self.t('transferConfirmMsg') + displayName + '？'
+                }).then(function(confirmed) {
+                    if (!confirmed) return;
+                    self.transferSession(selectedUserName);
+                });
+            });
+        },
+        transferSession: function(toUserName) {
+            var self = this;
+            if (!this.selectedConversationId || !toUserName) {
                 Dialog.alert({ title: this.t('alertTitle'), message: this.t('selectConversationFirst') });
                 return;
             }
             var convId = this.selectedConversationId;
             axios.post('/desk/conversation/transfer', {
                 conversationId: convId,
-                toUserId: toUserId
+                toUserName: toUserName
             })
                 .then(function(res) {
                     if (res.data.success) {

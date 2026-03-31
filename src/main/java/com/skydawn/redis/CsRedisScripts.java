@@ -24,11 +24,14 @@ public final class CsRedisScripts {
     /** 待分配队列批量出队（FIFO），返回 conversationId 列表 */
     @SuppressWarnings("unchecked")
     private static final RedisScript<List<String>> PENDING_POP_MULTI = (RedisScript<List<String>>) (RedisScript<?>) loadScript("pending_conversations_pop_multi.lua", List.class);
+    /** 安全释放分布式锁：仅当 value 匹配时才 DEL，防止误删他人锁，返回 1=已释放 0=未释放 */
+    private static final RedisScript<Long> UNLOCK = loadScript("unlock.lua", Long.class);
 
     public static RedisScript<Long> assignConversationToAgent() { return ASSIGN_CONVERSATION_TO_AGENT; }
     public static RedisScript<Long> pendingAdd() { return PENDING_ADD; }
     public static RedisScript<Long> pendingAddPriority() { return PENDING_ADD_PRIORITY; }
     public static RedisScript<List<String>> pendingPopMulti() { return PENDING_POP_MULTI; }
+    public static RedisScript<Long> unlock() { return UNLOCK; }
 
     private static <T> RedisScript<T> loadScript(String filename, Class<T> resultType) {
         try {

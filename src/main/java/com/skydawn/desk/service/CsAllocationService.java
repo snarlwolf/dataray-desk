@@ -125,7 +125,7 @@ public class CsAllocationService {
         try {
             receiveMessageUnderLock(conversationId, dto);
         } finally {
-            redisOperation.unlock(lockKey);
+            redisOperation.unlock(lockKey, lockVal);
         }
     }
 
@@ -144,6 +144,10 @@ public class CsAllocationService {
         String sourceMessageId = dto.getSourceMessageId();
         if (sourceMessageId == null || sourceMessageId.isBlank()) {
             log.debug("status update ignored, no sourceMessageId");
+            return;
+        }
+        if (dto.getMessageStatus() == null) {
+            log.debug("status update ignored, messageStatus is null, sourceMessageId={}", sourceMessageId);
             return;
         }
         Map<String, Object> statusPayload = Map.of(
@@ -219,7 +223,7 @@ public class CsAllocationService {
             reallocateFromNonHumanUser(clientId, existingConvId, userId, dto);
             return;
         }
-        if (redisFinder.isUserOnline(userId)) {
+        if (redisFinder.isUserOnline(userId) && sockets.isOnline(userId)) {
             pushToUser(userId, existingConvId, dto);
             return;
         }
@@ -309,31 +313,24 @@ public class CsAllocationService {
         }
     }
 
+    /**
+     * 调用方（receiveMessageUnderLock）已经持有 lockConversation 锁，此处不重复加锁。
+     */
     private void reassignAndPush(String fromId, String conversationId, String oldUserId, GeneralMessageDto dto) {
-        String lockKey = CsRedisKeys.lockConversation(conversationId);
-        String lockVal = "reassign-" + System.currentTimeMillis();
-        if (!redisOperation.tryLock(lockKey, lockVal)) {
-            log.debug("reassignAndPush: lock failed for conversationId={}, skip", conversationId);
-            return;
-        }
-        try {
-            redisOperation.userConversationRemove(oldUserId, conversationId);
-            redisOperation.decrLoadZset(oldUserId);
-            ensureConversationAndAppendMessage(conversationId, dto);
-            int maxCount = getMaxConvCount();
-            List<String> candidates = redisFinder.getOrderedCandidateUserIdsForAssignment(maxCount);
-            for (String candidateId : candidates) {
-                if (redisOperation.assignConversationToAgent(candidateId, conversationId, maxCount)) {
-                    sendMessageToUserOnly(candidateId, conversationId, dto);
-                    return;
-                }
+        redisOperation.userConversationRemove(oldUserId, conversationId);
+        redisOperation.decrLoadZset(oldUserId);
+        ensureConversationAndAppendMessage(conversationId, dto);
+        int maxCount = getMaxConvCount();
+        List<String> candidates = redisFinder.getOrderedCandidateUserIdsForAssignment(maxCount);
+        for (String candidateId : candidates) {
+            if (redisOperation.assignConversationToAgent(candidateId, conversationId, maxCount)) {
+                sendMessageToUserOnly(candidateId, conversationId, dto);
+                return;
             }
-            redisOperation.setConversationUser(conversationId, "AISYSTEM");
-            redisOperation.pendingConversationsAdd(conversationId);
-            log.debug("reassignAndPush: no suitable agent for conversationId={}, enqueued", conversationId);
-        } finally {
-            redisOperation.unlock(lockKey);
         }
+        redisOperation.setConversationUser(conversationId, "AISYSTEM");
+        redisOperation.pendingConversationsAdd(conversationId);
+        log.debug("reassignAndPush: no suitable agent for conversationId={}, enqueued", conversationId);
     }
 
     /** 分配用：取负载最小且最先登录的一名候选客服（供定时任务等使用）。 */
@@ -410,10 +407,14 @@ public class CsAllocationService {
         redisOperation.appendConversationMessage(conversationId, replyJson);
         // 自动回复入库 message，sys_user_id='AUTO'
         Long convId = conversationService.getOrCreateByRedisConversationId(conversationId, officialAccount, "waba");
-        Message msg = GeneralMessageToMessageConverter.toMessage(replyDto, convId, null);
-        msg.setIsStaff(1);
-        msg.setSysUserId("AUTO");
-        messageMapper.insert(msg);
+        if (convId != null) {
+            Message msg = GeneralMessageToMessageConverter.toMessage(replyDto, convId, null);
+            msg.setIsStaff(1);
+            msg.setSysUserId("AUTO");
+            messageMapper.insert(msg);
+        } else {
+            log.warn("sendUnsupportedAutoReplyAndPush: convId is null, skip insert, conversationId={}", conversationId);
+        }
         if (!sockets.sendToUser(userId, replyJson)) {
             log.warn("pushToUser system reply failed, userId={}", userId);
         }
@@ -421,45 +422,77 @@ public class CsAllocationService {
 
     /**
      * 结束会话：删除相关 key、负载 -1，若为 WABA 则向客户发系统消息；然后从待分配队列拉取最多 5 条会话给当前客服。
+     *
+     * @return null 表示正常结束；非 null 为需透传给前端的警告提示（如 WABA 24h 窗口关闭）
      */
-    public void endSession(String conversationId, String currentUserId) {
+    public String endSession(String conversationId, String currentUserId) {
         String fromId = redisFinder.getConversationFromId(conversationId);
         String userId = redisFinder.getConversationUser(conversationId);
         if (fromId == null || userId == null) {
             log.info("endSession: conversation already gone, conversationId={}", conversationId);
-            return;
+            return null;
         }
         String type = redisFinder.getConversationType(conversationId);
         String phoneNumberId = redisFinder.getConversationPhone(conversationId);
-        if ("waba".equalsIgnoreCase(type) && phoneNumberId != null && !phoneNumberId.isBlank() && fromId != null) {
-            WabaSenderDto dto = new WabaSenderDto(fromId, END_SESSION_SYSTEM_MESSAGE, phoneNumberId);
-            WabaMessageDto sent = wabaMessageSender.sendWabaTextMessage(dto);
-            if (sent != null) {
-                log.info("endSession: sent system message to customer fromId={}", fromId);
-                // 会话结束自动回复入库 message，sys_user_id='AUTO'
-                GeneralMessageDto endDto = new GeneralMessageDto();
-                endDto.setConversationId(conversationId);
-                endDto.setClientId(fromId);
-                endDto.setTextBody(END_SESSION_SYSTEM_MESSAGE);
-                endDto.setSourceMessageId(sent.getMessageId());
-                endDto.setTimestamp(System.currentTimeMillis() / 1000);
-                endDto.setMessageType(GeneralMessageDto.MessageType.TEXT);
-                endDto.setMessageStatus(GeneralMessageDto.MessageStatus.SENT);
-                endDto.setIsStaff(true);
-                endDto.setMessageSource("waba");
-                endDto.setOfficialAccount(phoneNumberId);
-                Long convId = conversationService.getOrCreateByRedisConversationId(conversationId, phoneNumberId, "waba");
-                Message msg = GeneralMessageToMessageConverter.toMessage(endDto, convId, null);
-                msg.setIsStaff(1);
-                msg.setSysUserId("AUTO");
-                messageMapper.insert(msg);
-            } else {
-                log.warn("endSession: failed to send system message to customer fromId={}", fromId);
+        // 在 endSessionAtomic 清除 Redis 之前先读取 DB 会话 ID，用于结束后更新 conversation 表状态
+        Long convDbId = redisOperation.getConversationDbId(conversationId);
+        String warning = null;
+        try {
+            if ("waba".equalsIgnoreCase(type) && phoneNumberId != null && !phoneNumberId.isBlank()) {
+                WabaSenderDto dto = new WabaSenderDto(fromId, END_SESSION_SYSTEM_MESSAGE, phoneNumberId);
+                WabaMessageDto sent = wabaMessageSender.sendWabaTextMessage(dto);
+                if (sent != null) {
+                    log.info("endSession: sent system message to customer fromId={}", fromId);
+                    // 会话结束自动回复入库 message，sys_user_id='AUTO'
+                    GeneralMessageDto endDto = new GeneralMessageDto();
+                    endDto.setConversationId(conversationId);
+                    endDto.setClientId(fromId);
+                    endDto.setTextBody(END_SESSION_SYSTEM_MESSAGE);
+                    endDto.setSourceMessageId(sent.getMessageId());
+                    endDto.setTimestamp(System.currentTimeMillis() / 1000);
+                    endDto.setMessageType(GeneralMessageDto.MessageType.TEXT);
+                    endDto.setMessageStatus(GeneralMessageDto.MessageStatus.SENT);
+                    endDto.setIsStaff(true);
+                    endDto.setMessageSource("waba");
+                    endDto.setOfficialAccount(phoneNumberId);
+                    Long convId = conversationService.getOrCreateByRedisConversationId(conversationId, phoneNumberId, "waba");
+                    convDbId = convId;
+                    if (convId != null) {
+                        Message msg = GeneralMessageToMessageConverter.toMessage(endDto, convId, null);
+                        msg.setIsStaff(1);
+                        msg.setSysUserId("AUTO");
+                        messageMapper.insert(msg);
+                    } else {
+                        log.warn("endSession: convId is null, skip message insert, conversationId={}", conversationId);
+                    }
+                } else {
+                    log.warn("endSession: WABA send failed, 24h window may have expired, fromId={}", fromId);
+                    warning = "此会话已停滞超过24小时，无法向客户发送会话结束消息。";
+                }
             }
+        } catch (Exception e) {
+            log.error("endSession: error during WABA send or DB write, conversationId={}", conversationId, e);
         }
+        // 若仍未拿到 DB ID（非 WABA 渠道或 try 块内异常），尝试从 Redis 再读一次
+        if (convDbId == null) {
+            convDbId = redisOperation.getConversationDbId(conversationId);
+        }
+        // Redis 清理始终执行，避免因 WABA/DB 异常导致会话状态残留
         redisOperation.endSessionAtomic(fromId, userId, conversationId);
+        // AI transfer-agent key 使用的 conversation.id 来自 AI 系统写入的 desk:cs:ai:conversation-db-id: key
+        Long aiConvDbId = redisFinder.getAiConversationDbId(conversationId);
+        log.info("endSession: convDbId={} aiConvDbId={} conversationId={}", convDbId, aiConvDbId, conversationId);
+        if (aiConvDbId != null) {
+            redisOperation.deleteAiConversationTransferAgentKey(String.valueOf(aiConvDbId));
+            log.info("endSession: deleted AI transfer key, aiConvDbId={}", aiConvDbId);
+        } else {
+            log.warn("endSession: aiConvDbId is null, AI transfer key NOT deleted, conversationId={}", conversationId);
+        }
+        // 更新 conversation 表状态为已关闭（使用本系统管理的 convDbId）
+        conversationService.markClosed(convDbId);
         log.info("endSession conversationId={} fromId={} userId={}", conversationId, fromId, userId);
         tryPullPendingToAgent(currentUserId);
+        return warning;
     }
 
     /** 结束会话或登录后：从待分配队列拉取最多 {@value #PENDING_PULL_MAX_PER_ACTION} 条分配给该客服并推送。 */
@@ -520,6 +553,33 @@ public class CsAllocationService {
         redisOperation.setConversationUser(conversationId, toUserId);
         redisOperation.decrLoadZset(fromUserId);
         redisOperation.incrLoadZset(toUserId);
+
+        // 转移后向接收方推送会话最后一条消息，使其会话列表出现该会话并产生气泡提示
+        pushTransferNotificationToUser(toUserId, conversationId);
+    }
+
+    /**
+     * 转移成功后通知接收方：取 Redis 会话消息列表的最后一条直接推送。
+     * 若消息列表为空（极少见），构造一条最小提示消息推送，确保接收方会话列表能够出现该会话。
+     */
+    private void pushTransferNotificationToUser(String toUserId, String conversationId) {
+        List<String> messages = redisFinder.getConversationMessages(conversationId);
+        if (!messages.isEmpty()) {
+            String lastJson = messages.get(messages.size() - 1);
+            sockets.sendToUser(toUserId, lastJson);
+            return;
+        }
+        // 兜底：消息列表为空时构造最小通知
+        String clientId = redisFinder.getConversationFromId(conversationId);
+        String officialAccount = redisFinder.getConversationPhone(conversationId);
+        GeneralMessageDto minimal = new GeneralMessageDto();
+        minimal.setConversationId(conversationId);
+        minimal.setClientId(clientId != null ? clientId : "");
+        minimal.setOfficialAccount(officialAccount != null ? officialAccount : "");
+        minimal.setMessageType(GeneralMessageDto.MessageType.TEXT);
+        minimal.setMessageStatus(GeneralMessageDto.MessageStatus.NORMAL);
+        minimal.setTimestamp(System.currentTimeMillis() / 1000);
+        sockets.sendToUser(toUserId, GSON.toJson(minimal));
     }
 
 }

@@ -47,12 +47,14 @@ public class CsAutoTransferAndCleanupJob {
             long offlineTs = parseLoginTime(offlineSince);
             if (now - offlineTs < thresholdSeconds * 1000L) continue;
             String lockKey = CsRedisKeys.lockTransfer(userId);
-            if (!redisOperation.tryLock(lockKey, "auto-" + now)) continue;
+            String outerLockVal = "auto-" + now;
+            if (!redisOperation.tryLock(lockKey, outerLockVal)) continue;
             try {
                 Set<String> conversationIds = redisFinder.getUserConversationList(userId);
                 for (String convId : conversationIds) {
                     String convLock = CsRedisKeys.lockConversation(convId);
-                    if (!redisOperation.tryLock(convLock, "transfer-" + now)) continue;
+                    String innerLockVal = "transfer-" + now;
+                    if (!redisOperation.tryLock(convLock, innerLockVal)) continue;
                     try {
                         redisOperation.userConversationRemove(userId, convId);
                         redisOperation.decrLoadZset(userId);
@@ -69,14 +71,14 @@ public class CsAutoTransferAndCleanupJob {
                             redisOperation.pendingConversationsAddPriority(convId);
                         }
                     } finally {
-                        redisOperation.unlock(convLock);
+                        redisOperation.unlock(convLock, innerLockVal);
                     }
                 }
                 redisOperation.userConversationClear(userId);
                 redisOperation.deleteUserOfflineSince(userId);
                 log.info("autoTransfer userId={} conversations={}", userId, conversationIds.size());
             } finally {
-                redisOperation.unlock(lockKey);
+                redisOperation.unlock(lockKey, outerLockVal);
             }
         }
     }

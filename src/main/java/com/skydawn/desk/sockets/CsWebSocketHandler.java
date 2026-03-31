@@ -15,6 +15,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import com.skydawn.desk.core.controller.SysUserLoginController;
 import com.skydawn.desk.core.entity.SysUser;
+import com.skydawn.desk.service.CsColleagueNotifyService;
 import com.skydawn.redis.RedisOperation;
 
 /**
@@ -28,10 +29,13 @@ public class CsWebSocketHandler extends TextWebSocketHandler {
 
     private final CsMessageSendSockets sockets;
     private final RedisOperation redisOperation;
+    private final CsColleagueNotifyService colleagueNotifyService;
 
-    public CsWebSocketHandler(CsMessageSendSockets sockets, RedisOperation redisOperation) {
+    public CsWebSocketHandler(CsMessageSendSockets sockets, RedisOperation redisOperation,
+                              CsColleagueNotifyService colleagueNotifyService) {
         this.sockets = sockets;
         this.redisOperation = redisOperation;
+        this.colleagueNotifyService = colleagueNotifyService;
     }
 
     @Override
@@ -52,6 +56,9 @@ public class CsWebSocketHandler extends TextWebSocketHandler {
         redisOperation.setUsers(loginName, logintime);
 
         sockets.register(loginName, session);
+
+        // 上线后通知同部门同事（含自身）
+        colleagueNotifyService.onUserOnline(user);
     }
 
     @Override
@@ -69,12 +76,24 @@ public class CsWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         String loginName = user.getUserName();
+        Long deptId = user.getDeptId();
         sockets.unregister(loginName, session);
+
+        // 若同账号已有新 WS 会话（重新登录/挤下线），跳过 Redis 下线清理，
+        // 避免旧会话的关闭事件误删新会话的在线状态，导致后续消息无法推送。
+        if (sockets.isOnline(loginName)) {
+            log.debug("afterConnectionClosed: {} re-logged in, new session active, skip Redis cleanup", loginName);
+            return;
+        }
+
         try {
             redisOperation.deleteUsers(loginName);
             String offlineSince = LocalDateTime.now().format(LOGIN_TIME);
             redisOperation.setUserOfflineSince(loginName, offlineSince);
             log.info("WebSocket closed loginName={}, offlineSince={}", loginName, offlineSince);
+
+            // 下线后通知同部门剩余同事（档案在 onUserOffline 内删除）
+            colleagueNotifyService.onUserOffline(loginName, deptId);
         } catch (IllegalStateException e) {
             // 应用关闭时 Redis 已销毁，忽略
             if (e.getMessage() == null || !e.getMessage().contains("destroyed")) {

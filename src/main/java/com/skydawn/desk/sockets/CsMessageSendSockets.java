@@ -3,6 +3,7 @@ package com.skydawn.desk.sockets;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -105,9 +106,30 @@ public class CsMessageSendSockets {
         }
     }
 
+    /**
+     * 主动登出：关闭本实例上该用户的 WebSocket 连接（正常关闭，1000）。
+     * 同时由调用方通过 Redis Pub/Sub 通知其它实例做同样处理。
+     */
+    public void closeForLogout(String userId) {
+        if (userId == null) return;
+        WebSocketSession session = userIdToSession.get(Objects.requireNonNull(userId));
+        if (session == null || !session.isOpen()) return;
+        try {
+            session.close(new CloseStatus(CloseStatus.NORMAL.getCode()));
+            log.info("WebSocket closed for logout userId={}", userId);
+        } catch (IOException e) {
+            log.debug("closeForLogout failed userId={}", userId, e);
+        }
+    }
+
     public boolean isOnline(String userId) {
         if (userId == null) return false;
         WebSocketSession session = userIdToSession.get(Objects.requireNonNull(userId));
         return session != null && session.isOpen();
+    }
+
+    /** 返回本实例当前所有已连接的用户名快照（用于推送空列表、清理冗余数据等场景） */
+    public Set<String> getLocalUserNames() {
+        return Set.copyOf(userIdToSession.keySet());
     }
 }
